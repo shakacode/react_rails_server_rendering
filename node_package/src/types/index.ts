@@ -158,6 +158,7 @@ export interface ReactOnRails {
   setOptions(newOptions: {traceTurbolinks: boolean}): void;
   reactHydrateOrRender(domNode: Element, reactElement: ReactElement, hydrate: boolean): RenderReturnType;
   reactOnRailsPageLoaded(): void;
+  renderOrHydrateLoadedComponents(): void;
   reactOnRailsComponentLoaded(domId: string): void;
   authenticityToken(): string | null;
   authenticityHeaders(otherHeaders: { [id: string]: string }): AuthenticityHeaders;
@@ -169,6 +170,7 @@ export interface ReactOnRails {
     name: string, props: Record<string, string>, domNodeId: string, hydrate: boolean
   ): RenderReturnType;
   getComponent(name: string): RegisteredComponent;
+  getOrWaitForComponent(name: string): Promise<RegisteredComponent>;
   serverRenderReactComponent(options: RenderParams): null | string | Promise<RenderResult>;
   streamServerRenderedReactComponent(options: RenderParams): Readable;
   serverRenderRSCReactComponent(options: RenderParams): PassThrough;

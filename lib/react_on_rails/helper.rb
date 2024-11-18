@@ -444,7 +444,7 @@ module ReactOnRails
 
       result_console_script = render_options.replay_console ? console_script : ""
       result = compose_react_component_html_with_spec_and_console(
-        component_specification_tag, rendered_output, result_console_script
+        component_specification_tag, rendered_output, result_console_script, render_options.dom_id
       )
 
       prepend_render_rails_context(result)
@@ -510,12 +510,19 @@ module ReactOnRails
       )
     end
 
-    def compose_react_component_html_with_spec_and_console(component_specification_tag, rendered_output, console_script)
+    def compose_react_component_html_with_spec_and_console(component_specification_tag, rendered_output, console_script, dom_id = nil)
+      hydrate_script = dom_id.present? ? content_tag(:script, %(
+window.REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS.push('#{dom_id}');
+if (window.ReactOnRails) {
+  window.ReactOnRails.renderOrHydrateLoadedComponents();
+}
+      ).html_safe) : ""
       # IMPORTANT: Ensure that we mark string as html_safe to avoid escaping.
       html_content = <<~HTML
         #{rendered_output}
               #{component_specification_tag}
               #{console_script}
+              #{hydrate_script}
       HTML
       html_content.strip.html_safe
     end
@@ -527,10 +534,15 @@ module ReactOnRails
 
       @rendered_rails_context = true
 
-      content_tag(:script,
-                  json_safe_and_pretty(data).html_safe,
-                  type: "application/json",
-                  id: "js-react-on-rails-context")
+      rails_context_tag = content_tag(:script,
+                                      json_safe_and_pretty(data).html_safe,
+                                      type: "application/json",
+                                      id: "js-react-on-rails-context")
+      rails_context_tag.concat(
+        content_tag(:script, %(
+window.REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS = [];
+        ).html_safe)
+      )
     end
 
     # prepend the rails_context if not yet applied
@@ -555,6 +567,7 @@ module ReactOnRails
                                                 json_safe_and_pretty(render_options.client_props).html_safe,
                                                 type: "application/json",
                                                 class: "js-react-on-rails-component",
+                                                id: "js-react-on-rails-component-#{render_options.dom_id}",
                                                 "data-component-name" => render_options.react_component_name,
                                                 "data-trace" => (render_options.trace ? true : nil),
                                                 "data-dom-id" => render_options.dom_id)

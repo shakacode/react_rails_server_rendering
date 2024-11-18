@@ -20,12 +20,15 @@ declare global {
     ReactOnRails: ReactOnRailsType;
     __REACT_ON_RAILS_EVENT_HANDLERS_RAN_ONCE__?: boolean;
     roots: Root[];
+    REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS?: string[];
+    REACT_ON_RAILS_UNMOUNTED_BEFORE?: boolean;
   }
 
   namespace NodeJS {
     interface Global {
       ReactOnRails: ReactOnRailsType;
       roots: Root[];
+      REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS?: string[];
     }
   }
   namespace Turbolinks {
@@ -134,7 +137,7 @@ function domNodeIdForEl(el: Element): string {
  * Used for client rendering by ReactOnRails. Either calls ReactDOM.hydrate, ReactDOM.render, or
  * delegates to a renderer registered by the user.
  */
-function render(el: Element, context: Context, railsContext: RailsContext): void {
+async function render(el: Element, context: Context, railsContext: RailsContext): Promise<void> {
   // This must match lib/react_on_rails/helper.rb
   const name = el.getAttribute('data-component-name') || '';
   const domNodeId = domNodeIdForEl(el);
@@ -144,7 +147,7 @@ function render(el: Element, context: Context, railsContext: RailsContext): void
   try {
     const domNode = document.getElementById(domNodeId);
     if (domNode) {
-      const componentObj = context.ReactOnRails.getComponent(name);
+      const componentObj = await context.ReactOnRails.getOrWaitForComponent(name);
       if (delegateToRenderer(componentObj, props, railsContext, domNodeId, trace)) {
         return;
       }
@@ -180,13 +183,6 @@ You should return a React.Component always for the client side entry point.`);
   }
 }
 
-function forEachReactOnRailsComponentRender(context: Context, railsContext: RailsContext): void {
-  const els = reactOnRailsHtmlElements();
-  for (let i = 0; i < els.length; i += 1) {
-    render(els[i], context, railsContext);
-  }
-}
-
 function parseRailsContext(): RailsContext | null {
   const el = document.getElementById('js-react-on-rails-context');
   if (!el) {
@@ -202,39 +198,62 @@ function parseRailsContext(): RailsContext | null {
   return JSON.parse(el.textContent);
 }
 
+function getContextAndRailsContext(): { context: Context; railsContext: RailsContext | null } {
+  const railsContext = parseRailsContext();
+  const context = findContext();
+  
+  if (railsContext && supportsRootApi && !context.roots) {
+    context.roots = [];
+  }
+  
+  return { context, railsContext };
+}
+
 export function reactOnRailsPageLoaded(): void {
   debugTurbolinks('reactOnRailsPageLoaded');
 
-  const railsContext = parseRailsContext();
-
+  const { context, railsContext } = getContextAndRailsContext();
+  
   // If no react on rails components
   if (!railsContext) return;
 
-  const context = findContext();
-  if (supportsRootApi) {
-    context.roots = [];
-  }
   forEachStore(context, railsContext);
-  forEachReactOnRailsComponentRender(context, railsContext);
 }
 
-export function reactOnRailsComponentLoaded(domId: string): void {
-  debugTurbolinks(`reactOnRailsComponentLoaded ${domId}`);
-
-  const railsContext = parseRailsContext();
-
-  // If no react on rails components
-  if (!railsContext) return;
-
-  const context = findContext();
-  if (supportsRootApi) {
-    context.roots = [];
-  }
-
+async function renderUsingDomId(domId: string, context: Context, railsContext: RailsContext) {
   const el = document.querySelector(`[data-dom-id=${domId}]`);
   if (!el) return;
 
-  render(el, context, railsContext);
+  await render(el, context, railsContext);
+}
+
+export async function renderOrHydrateLoadedComponents(): Promise<void> {
+  debugTurbolinks('renderOrHydrateLoadedComponents');
+
+  const { context, railsContext } = getContextAndRailsContext();
+  
+  // If no react on rails components
+  if (!railsContext) return;
+
+  // copy and clear the pending dom ids, so they don't get processed again
+  const pendingDomIds = context.REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS ?? [];
+  context.REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS = [];
+  await Promise.all(
+    pendingDomIds.map(async (domId) => {
+      await renderUsingDomId(domId, context, railsContext);
+    })
+  );
+}
+
+export async function reactOnRailsComponentLoaded(domId: string): Promise<void> {
+  debugTurbolinks(`reactOnRailsComponentLoaded ${domId}`);
+
+  const { context, railsContext } = getContextAndRailsContext();
+  
+  // If no react on rails components
+  if (!railsContext) return;
+
+  await renderUsingDomId(domId, context, railsContext);
 }
 
 function unmount(el: Element): void {
@@ -333,5 +352,6 @@ export function clientStartup(context: Context): void {
   // eslint-disable-next-line no-underscore-dangle, no-param-reassign
   context.__REACT_ON_RAILS_EVENT_HANDLERS_RAN_ONCE__ = true;
 
+  console.log('clientStartup');
   onPageReady(renderInit);
 }

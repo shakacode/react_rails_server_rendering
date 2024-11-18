@@ -136,6 +136,10 @@ ctx.ReactOnRails = {
     ClientStartup.reactOnRailsPageLoaded();
   },
 
+  renderOrHydrateLoadedComponents(): void {
+    ClientStartup.renderOrHydrateLoadedComponents();
+  },
+
   reactOnRailsComponentLoaded(domId: string): void {
     ClientStartup.reactOnRailsComponentLoaded(domId);
   },
@@ -238,6 +242,15 @@ ctx.ReactOnRails = {
    */
   getComponent(name: string): RegisteredComponent {
     return ComponentRegistry.get(name);
+  },
+
+  /**
+   * Get the component that you registered, or wait for it to be registered
+   * @param name
+   * @returns {name, component, renderFunction, isRenderer}
+   */
+  getOrWaitForComponent(name: string): Promise<RegisteredComponent> {
+    return ComponentRegistry.getOrWaitForComponent(name);
   },
 
   /**
