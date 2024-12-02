@@ -21,6 +21,7 @@ declare global {
     __REACT_ON_RAILS_EVENT_HANDLERS_RAN_ONCE__?: boolean;
     roots: Root[];
     REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS?: string[];
+    REACT_ON_RAILS_PENDING_STORE_NAMES?: string[];
     REACT_ON_RAILS_UNMOUNTED_BEFORE?: boolean;
   }
 
@@ -29,6 +30,7 @@ declare global {
       ReactOnRails: ReactOnRailsType;
       roots: Root[];
       REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS?: string[];
+      REACT_ON_RAILS_PENDING_STORE_NAMES?: string[];
     }
   }
   namespace Turbolinks {
@@ -83,19 +85,12 @@ function reactOnRailsHtmlElements(): HTMLCollectionOf<Element> {
   return document.getElementsByClassName('js-react-on-rails-component');
 }
 
-function initializeStore(el: Element, context: Context, railsContext: RailsContext): void {
+async function initializeStore(el: Element, context: Context, railsContext: RailsContext): Promise<void> {
   const name = el.getAttribute(REACT_ON_RAILS_STORE_ATTRIBUTE) || '';
   const props = (el.textContent !== null) ? JSON.parse(el.textContent) : {};
-  const storeGenerator = context.ReactOnRails.getStoreGenerator(name);
+  const storeGenerator = await context.ReactOnRails.getOrWaitForStoreGenerator(name);
   const store = storeGenerator(props, railsContext);
   context.ReactOnRails.setStore(name, store);
-}
-
-function forEachStore(context: Context, railsContext: RailsContext): void {
-  const els = document.querySelectorAll(`[${REACT_ON_RAILS_STORE_ATTRIBUTE}]`);
-  for (let i = 0; i < els.length; i += 1) {
-    initializeStore(els[i], context, railsContext);
-  }
 }
 
 function turbolinksVersion5(): boolean {
@@ -209,21 +204,20 @@ function getContextAndRailsContext(): { context: Context; railsContext: RailsCon
   return { context, railsContext };
 }
 
+// TODO: remove it
 export function reactOnRailsPageLoaded(): void {
   debugTurbolinks('reactOnRailsPageLoaded');
-
-  const { context, railsContext } = getContextAndRailsContext();
-  
-  // If no react on rails components
-  if (!railsContext) return;
-
-  forEachStore(context, railsContext);
 }
 
 async function renderUsingDomId(domId: string, context: Context, railsContext: RailsContext) {
   const el = document.querySelector(`[data-dom-id=${domId}]`);
   if (!el) return;
 
+  const storeDependencies = el.getAttribute('data-store-dependencies');
+  const storeDependenciesArray = storeDependencies ? JSON.parse(storeDependencies) as string[] : [];
+  if (storeDependenciesArray.length > 0) {
+    await Promise.all(storeDependenciesArray.map(storeName => context.ReactOnRails.getOrWaitForStore(storeName)));
+  }
   await render(el, context, railsContext);
 }
 
@@ -232,7 +226,6 @@ export async function renderOrHydrateLoadedComponents(): Promise<void> {
 
   const { context, railsContext } = getContextAndRailsContext();
   
-  // If no react on rails components
   if (!railsContext) return;
 
   // copy and clear the pending dom ids, so they don't get processed again
@@ -243,6 +236,22 @@ export async function renderOrHydrateLoadedComponents(): Promise<void> {
       await renderUsingDomId(domId, context, railsContext);
     })
   );
+}
+
+export async function hydratePendingStores(): Promise<void> {
+  debugTurbolinks('hydratePendingStores');
+
+  const { context, railsContext } = getContextAndRailsContext();
+
+  if (!railsContext) return;
+
+  const pendingStoreNames = context.REACT_ON_RAILS_PENDING_STORE_NAMES ?? [];
+  context.REACT_ON_RAILS_PENDING_STORE_NAMES = [];
+  await Promise.all(pendingStoreNames.map(async (storeName) => {
+    const storeElement = document.querySelector(`[${REACT_ON_RAILS_STORE_ATTRIBUTE}=${storeName}]`);
+    if (!storeElement) throw new Error(`Store element with name ${storeName} not found`);
+    await initializeStore(storeElement, context, railsContext);
+  }));
 }
 
 export async function reactOnRailsComponentLoaded(domId: string): Promise<void> {

@@ -119,6 +119,10 @@ module ReactOnRails
         options[:rsc?]
       end
 
+      def store_dependencies
+        options[:store_dependencies]
+      end
+
       private
 
       attr_reader :options

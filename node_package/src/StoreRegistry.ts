@@ -2,6 +2,8 @@ import type { Store, StoreGenerator } from './types';
 
 const registeredStoreGenerators = new Map<string, StoreGenerator>();
 const hydratedStores = new Map<string, Store>();
+const hydrationCallbacks = new Map<string, Array<(store: Store) => void>>();
+const generatorCallbacks = new Map<string, Array<(generator: StoreGenerator) => void>>();
 
 export default {
   /**
@@ -21,6 +23,12 @@ export default {
       }
 
       registeredStoreGenerators.set(name, store);
+
+      const callbacks = generatorCallbacks.get(name) || [];
+      callbacks.forEach(callback => {
+        setTimeout(() => callback(store), 0);
+      });
+      generatorCallbacks.delete(name);
     });
   },
 
@@ -80,6 +88,12 @@ This can happen if you are server rendering and either:
    */
   setStore(name: string, store: Store): void {
     hydratedStores.set(name, store);
+    
+    const callbacks = hydrationCallbacks.get(name) || [];
+    callbacks.forEach(callback => {
+      setTimeout(() => callback(store), 0);
+    });
+    hydrationCallbacks.delete(name);
   },
 
   /**
@@ -103,5 +117,71 @@ This can happen if you are server rendering and either:
    */
   stores(): Map<string, Store> {
     return hydratedStores;
+  },
+
+  /**
+   * Register a callback to be called when a specific store is hydrated
+   * @param storeName Name of the store to watch for
+   * @param callback Function called with the store when hydrated
+   */
+  onStoreHydrated(
+    storeName: string,
+    callback: (store: Store) => void
+  ): void {
+    // If store is already hydrated, schedule callback
+    const existingStore = hydratedStores.get(storeName);
+    if (existingStore) {
+      setTimeout(() => callback(existingStore), 0);
+      return;
+    }
+
+    // Store callback for future hydration
+    const callbacks = hydrationCallbacks.get(storeName) || [];
+    callbacks.push(callback);
+    hydrationCallbacks.set(storeName, callbacks);
+  },
+
+  /**
+   * Used by components to get the hydrated store, waiting for it to be hydrated if necessary.
+   * @param name Name of the store to wait for
+   * @returns Promise that resolves with the Store once hydrated
+   */
+  async getOrWaitForStore(name: string): Promise<Store> {
+    return new Promise((resolve) => {
+      this.onStoreHydrated(name, resolve);
+    });
+  },
+
+  /**
+   * Register a callback to be called when a specific store generator is registered
+   * @param storeName Name of the store generator to watch for
+   * @param callback Function called with the store generator when registered
+   */
+  onStoreGeneratorRegistered(
+    storeName: string,
+    callback: (generator: StoreGenerator) => void
+  ): void {
+    // If generator is already registered, schedule callback
+    const existingGenerator = registeredStoreGenerators.get(storeName);
+    if (existingGenerator) {
+      setTimeout(() => callback(existingGenerator), 0);
+      return;
+    }
+
+    // Store callback for future registration
+    const callbacks = generatorCallbacks.get(storeName) || [];
+    callbacks.push(callback);
+    generatorCallbacks.set(storeName, callbacks);
+  },
+
+  /**
+   * Used by components to get the store generator, waiting for it to be registered if necessary.
+   * @param name Name of the store generator to wait for
+   * @returns Promise that resolves with the StoreGenerator once registered
+   */
+  async getOrWaitForStoreGenerator(name: string): Promise<StoreGenerator> {
+    return new Promise((resolve) => {
+      this.onStoreGeneratorRegistered(name, resolve);
+    });
   },
 };

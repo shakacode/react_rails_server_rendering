@@ -151,14 +151,18 @@ export type RenderReturnType = void | Element | Component | Root;
 
 export interface ReactOnRails {
   register(components: { [id: string]: ReactComponentOrRenderFunction }): void;
+  registerServerComponent(...componentNames: string[]): void;
   /** @deprecated Use registerStoreGenerators instead */
   registerStore(stores: { [id: string]: StoreGenerator }): void;
   registerStoreGenerators(storeGenerators: { [id: string]: StoreGenerator }): void;
   getStore(name: string, throwIfMissing?: boolean): Store | undefined;
+  getOrWaitForStore(name: string): Promise<Store>;
+  getOrWaitForStoreGenerator(name: string): Promise<StoreGenerator>;
   setOptions(newOptions: {traceTurbolinks: boolean}): void;
   reactHydrateOrRender(domNode: Element, reactElement: ReactElement, hydrate: boolean): RenderReturnType;
   reactOnRailsPageLoaded(): void;
   renderOrHydrateLoadedComponents(): void;
+  hydratePendingStores(): void;
   reactOnRailsComponentLoaded(domId: string): void;
   authenticityToken(): string | null;
   authenticityHeaders(otherHeaders: { [id: string]: string }): AuthenticityHeaders;

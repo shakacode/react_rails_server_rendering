@@ -9,6 +9,7 @@ module ReactOnRails
   end
 
   DEFAULT_GENERATED_ASSETS_DIR = File.join(%w[public webpack], Rails.env).freeze
+  DEFAULT_RSC_RENDERING_URL = "rsc/".freeze
 
   def self.configuration
     @configuration ||= Configuration.new(
@@ -42,7 +43,9 @@ module ReactOnRails
       make_generated_server_bundle_the_entrypoint: false,
       defer_generated_component_packs: true,
       # forces the loading of React components
-      force_load: false
+      force_load: false,
+      auto_load_server_components: true,
+      rsc_rendering_url: DEFAULT_RSC_RENDERING_URL
     )
   end
 
@@ -58,7 +61,7 @@ module ReactOnRails
                   :same_bundle_for_client_and_server, :rendering_props_extension,
                   :make_generated_server_bundle_the_entrypoint,
                   :defer_generated_component_packs, :rsc_bundle_js_file,
-                  :force_load
+                  :force_load, :auto_load_server_components, :rsc_rendering_url
 
     # rubocop:disable Metrics/AbcSize
     def initialize(node_modules_location: nil, server_bundle_js_file: nil, prerender: nil,
@@ -74,7 +77,7 @@ module ReactOnRails
                    i18n_dir: nil, i18n_yml_dir: nil, i18n_output_format: nil, i18n_yml_safe_load_options: nil,
                    random_dom_id: nil, server_render_method: nil, rendering_props_extension: nil,
                    components_subdirectory: nil, auto_load_bundle: nil, force_load: nil,
-                   rsc_bundle_js_file: nil)
+                   rsc_bundle_js_file: nil, auto_load_server_components: nil, rsc_rendering_url: nil)
       self.node_modules_location = node_modules_location.present? ? node_modules_location : Rails.root
       self.generated_assets_dirs = generated_assets_dirs
       self.generated_assets_dir = generated_assets_dir
@@ -115,6 +118,8 @@ module ReactOnRails
       self.make_generated_server_bundle_the_entrypoint = make_generated_server_bundle_the_entrypoint
       self.defer_generated_component_packs = defer_generated_component_packs
       self.force_load = force_load
+      self.auto_load_server_components = auto_load_server_components
+      self.rsc_rendering_url = rsc_rendering_url
     end
     # rubocop:enable Metrics/AbcSize
 

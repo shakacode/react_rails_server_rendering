@@ -44,13 +44,60 @@ module ReactOnRails
       puts(Rainbow("Generated Packs: #{output_path}").yellow)
     end
 
+    def first_js_statement_in_code(content)
+      return "" if content.nil? || content.empty?
+      
+      start_index = 0
+      content_length = content.length
+      
+      while start_index < content_length
+        # Skip whitespace
+        while start_index < content_length && content[start_index].match?(/\s/)
+          start_index += 1
+        end
+        
+        break if start_index >= content_length
+        
+        current_chars = content[start_index, 2]
+        
+        case current_chars
+        when '//'
+          # Single-line comment
+          newline_index = content.index("\n", start_index)
+          return "" if newline_index.nil?
+          start_index = newline_index + 1
+        when '/*'
+          # Multi-line comment
+          comment_end = content.index('*/', start_index)
+          return "" if comment_end.nil?
+          start_index = comment_end + 2
+        else
+          # Found actual content
+          next_line_index = content.index("\n", start_index)
+          return next_line_index ? content[start_index...next_line_index].strip : content[start_index..].strip
+        end
+      end
+
+      ""
+    end
+
+    def is_client_entrypoint?(file_path)
+      content = File.read(file_path)
+      # has "use client" directive. It can be "use client" or 'use client'
+      first_js_statement_in_code(content).match?(/^["']use client["'](?:;|\s|$)/)
+    end
+
     def pack_file_contents(file_path)
       registered_component_name = component_name(file_path)
+      register_as_server_component = ReactOnRails.configuration.auto_load_server_components && !is_client_entrypoint?(file_path)
+      import_statement = register_as_server_component ? "" : "import #{registered_component_name} from '#{relative_component_path_from_generated_pack(file_path)}';"
+      register_call = register_as_server_component ? "registerServerComponent(\"#{registered_component_name}\")" : "register({#{registered_component_name}})";
+
       <<~FILE_CONTENT
         import ReactOnRails from 'react-on-rails';
-        import #{registered_component_name} from '#{relative_component_path_from_generated_pack(file_path)}';
+        #{import_statement}
 
-        ReactOnRails.register({#{registered_component_name}});
+        ReactOnRails.#{register_call};
       FILE_CONTENT
     end
 

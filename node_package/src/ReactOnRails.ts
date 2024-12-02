@@ -55,6 +55,16 @@ ctx.ReactOnRails = {
     ComponentRegistry.register(components);
   },
 
+  /**
+   * Register a specific component as a server component.
+   * The component will not be included in the client bundle.
+   * When it's rendered, a call will be made to the server to render it.
+   * @param componentNames
+   */
+  registerServerComponent(...componentNames: string[]): void {
+    ComponentRegistry.registerServerComponent(...componentNames);
+  },
+
   registerStore(stores: { [id: string]: StoreGenerator }): void {
     this.registerStoreGenerators(stores);
   },
@@ -85,6 +95,24 @@ ctx.ReactOnRails = {
    */
   getStore(name: string, throwIfMissing = true): Store | undefined {
     return StoreRegistry.getStore(name, throwIfMissing);
+  },
+
+  /**
+   * Get a store by name, or wait for it to be registered.
+   * @param name
+   * @returns Promise<Store>
+   */
+  getOrWaitForStore(name: string): Promise<Store> {
+    return StoreRegistry.getOrWaitForStore(name);
+  },
+
+  /**
+   * Get a store generator by name, or wait for it to be registered.
+   * @param name
+   * @returns Promise<StoreGenerator>
+   */
+  getOrWaitForStoreGenerator(name: string): Promise<StoreGenerator> {
+    return StoreRegistry.getOrWaitForStoreGenerator(name);
   },
 
   /**
@@ -138,6 +166,10 @@ ctx.ReactOnRails = {
 
   renderOrHydrateLoadedComponents(): void {
     ClientStartup.renderOrHydrateLoadedComponents();
+  },
+
+  hydratePendingStores(): void {
+    ClientStartup.hydratePendingStores();
   },
 
   reactOnRailsComponentLoaded(domId: string): void {
