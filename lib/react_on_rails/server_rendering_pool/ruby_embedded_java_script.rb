@@ -234,8 +234,6 @@ module ReactOnRails
         end
 
         def parse_result_and_replay_console_messages(result_string, render_options)
-          return { html: result_string } if render_options.rsc?
-
           result = nil
           begin
             result = JSON.parse(result_string)

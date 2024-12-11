@@ -15,7 +15,7 @@ type RenderState = {
   error?: RenderingError;
 };
 
-type StreamRenderState = Omit<RenderState, 'result'> & {
+export type StreamRenderState = Omit<RenderState, 'result'> & {
   result: null | Readable;
   isShellReady: boolean;
 };
@@ -27,7 +27,7 @@ type RenderOptions = {
   renderingReturnsPromises: boolean;
 };
 
-function convertToError(e: unknown): Error {
+export function convertToError(e: unknown): Error {
   return e instanceof Error ? e : new Error(String(e));
 }
 
@@ -104,7 +104,7 @@ function handleRenderingError(e: unknown, options: { componentName: string, thro
   };
 }
 
-function createResultObject(html: string | null, consoleReplayScript: string, renderState: RenderState | StreamRenderState): RenderResult {
+export function createResultObject(html: string | null, consoleReplayScript: string, renderState: RenderState | StreamRenderState): RenderResult {
   return {
     html,
     consoleReplayScript,
@@ -210,7 +210,7 @@ const stringToStream = (str: string): Readable => {
   return stream;
 };
 
-const transformRenderStreamChunksToResultObject = (renderState: StreamRenderState) => {
+export const transformRenderStreamChunksToResultObject = (renderState: StreamRenderState) => {
   const consoleHistory = console.history;
   let previouslyReplayedConsoleMessages = 0;
 
@@ -298,7 +298,15 @@ const streamRenderReactComponent = (reactRenderingResult: ReactElement, options:
   return readableStream;
 }
 
-export const streamServerRenderedReactComponent = (options: RenderParams): Readable => {
+export type StreamRenderer<T> = (
+  reactElement: ReactElement,
+  options: RenderParams
+) => T;
+
+export const streamServerRenderedComponent = <T>(
+  options: RenderParams,
+  renderStrategy: StreamRenderer<T>
+): T => {
   const { name: componentName, domNodeId, trace, props, railsContext, throwJsErrors } = options;
 
   try {
@@ -317,7 +325,7 @@ export const streamServerRenderedReactComponent = (options: RenderParams): Reada
       throw new Error('Server rendering of streams is not supported for server render hashes or promises.');
     }
 
-    return streamRenderReactComponent(reactRenderingResult, options);
+    return renderStrategy(reactRenderingResult, options);
   } catch (e) {
     if (throwJsErrors) {
       throw e;
@@ -326,8 +334,11 @@ export const streamServerRenderedReactComponent = (options: RenderParams): Reada
     const error = convertToError(e);
     const htmlResult = handleError({ e: error, name: componentName, serverSide: true });
     const jsonResult = JSON.stringify(createResultObject(htmlResult, buildConsoleReplay(), { hasErrors: true, error, result: null }));
-    return stringToStream(jsonResult);
+    return stringToStream(jsonResult) as T;
   }
 };
+
+// Update the existing streamServerRenderedReactComponent to use the new shared function
+export const streamServerRenderedReactComponent = (options: RenderParams): Readable => streamServerRenderedComponent(options, streamRenderReactComponent);
 
 export default serverRenderReactComponent;

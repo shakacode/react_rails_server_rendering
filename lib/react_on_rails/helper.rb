@@ -436,7 +436,7 @@ module ReactOnRails
       render_options = create_render_options(react_component_name, options)
       json_stream = server_rendered_react_component(render_options)
       json_stream.transform do |chunk|
-        chunk[:html].html_safe
+        (chunk.to_json + "\n").html_safe
       end
     end
 
@@ -691,10 +691,7 @@ ReactOnRails.reactOnRailsComponentLoaded('#{render_options.dom_id}');
                                                js_code: js_code)
       end
 
-      # TODO: handle errors for rsc streams
-      return result if render_options.rsc?
-
-      if render_options.stream?
+      if render_options.stream? || render_options.rsc?
         result.transform do |chunk_json_result|
           if should_raise_streaming_prerender_error?(chunk_json_result, render_options)
             raise_prerender_error(chunk_json_result, react_component_name, props, js_code)

@@ -185,7 +185,7 @@ export interface ReactOnRails {
   getOrWaitForComponent(name: string): Promise<RegisteredComponent>;
   serverRenderReactComponent(options: RenderParams): null | string | Promise<RenderResult>;
   streamServerRenderedReactComponent(options: RenderParams): Readable;
-  serverRenderRSCReactComponent(options: RenderParams): PassThrough;
+  serverRenderRSCReactComponent(options: RenderParams): Readable;
   handleError(options: ErrorOptions): string | undefined;
   buildConsoleReplay(): string;
   registeredComponents(): Map<string, RegisteredComponent>;
