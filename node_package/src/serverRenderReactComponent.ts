@@ -298,14 +298,14 @@ const streamRenderReactComponent = (reactRenderingResult: ReactElement, options:
   return readableStream;
 }
 
-export type StreamRenderer<T> = (
+export type StreamRenderer<T, P extends RenderParams> = (
   reactElement: ReactElement,
-  options: RenderParams
+  options: P
 ) => T;
 
-export const streamServerRenderedComponent = <T>(
-  options: RenderParams,
-  renderStrategy: StreamRenderer<T>
+export const streamServerRenderedComponent = <T, P extends RenderParams>(
+  options: P,
+  renderStrategy: StreamRenderer<T, P>
 ): T => {
   const { name: componentName, domNodeId, trace, props, railsContext, throwJsErrors } = options;
 

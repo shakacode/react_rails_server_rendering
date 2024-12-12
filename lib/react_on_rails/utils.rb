@@ -109,6 +109,13 @@ module ReactOnRails
       @rsc_bundle_path = bundle_js_file_path(bundle_name)
     end
 
+    def self.react_client_manifest_file_path
+      return @react_client_manifest_path if @react_client_manifest_path && !Rails.env.development?
+
+      file_name = ReactOnRails.configuration.react_client_manifest_file
+      @react_client_manifest_path = bundle_js_file_path(file_name)
+    end
+
     def self.running_on_windows?
       (/cygwin|mswin|mingw|bccwin|wince|emx/ =~ RUBY_PLATFORM) != nil
     end

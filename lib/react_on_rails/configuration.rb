@@ -9,6 +9,7 @@ module ReactOnRails
   end
 
   DEFAULT_GENERATED_ASSETS_DIR = File.join(%w[public webpack], Rails.env).freeze
+  DEFAULT_REACT_CLIENT_MANIFEST_FILE = "react-client-manifest.json"
 
   def self.configuration
     @configuration ||= Configuration.new(
@@ -18,6 +19,7 @@ module ReactOnRails
       generated_assets_dir: "",
       server_bundle_js_file: "",
       rsc_bundle_js_file: "",
+      react_client_manifest_file: DEFAULT_REACT_CLIENT_MANIFEST_FILE,
       prerender: false,
       auto_load_bundle: false,
       replay_console: true,
@@ -57,8 +59,8 @@ module ReactOnRails
                   :server_render_method, :random_dom_id, :auto_load_bundle,
                   :same_bundle_for_client_and_server, :rendering_props_extension,
                   :make_generated_server_bundle_the_entrypoint,
-                  :defer_generated_component_packs, :rsc_bundle_js_file,
-                  :force_load
+                  :defer_generated_component_packs, :force_load, :rsc_bundle_js_file,
+                  :react_client_manifest_file
 
     # rubocop:disable Metrics/AbcSize
     def initialize(node_modules_location: nil, server_bundle_js_file: nil, prerender: nil,
@@ -74,7 +76,7 @@ module ReactOnRails
                    i18n_dir: nil, i18n_yml_dir: nil, i18n_output_format: nil, i18n_yml_safe_load_options: nil,
                    random_dom_id: nil, server_render_method: nil, rendering_props_extension: nil,
                    components_subdirectory: nil, auto_load_bundle: nil, force_load: nil,
-                   rsc_bundle_js_file: nil)
+                   rsc_bundle_js_file: nil, react_client_manifest_file: nil)
       self.node_modules_location = node_modules_location.present? ? node_modules_location : Rails.root
       self.generated_assets_dirs = generated_assets_dirs
       self.generated_assets_dir = generated_assets_dir
@@ -102,6 +104,7 @@ module ReactOnRails
       # Server rendering:
       self.server_bundle_js_file = server_bundle_js_file
       self.rsc_bundle_js_file = rsc_bundle_js_file
+      self.react_client_manifest_file = react_client_manifest_file
       self.same_bundle_for_client_and_server = same_bundle_for_client_and_server
       self.server_renderer_pool_size = self.development_mode ? 1 : server_renderer_pool_size
       self.server_renderer_timeout = server_renderer_timeout # seconds
@@ -247,6 +250,8 @@ module ReactOnRails
       files = ["manifest.json"]
       files << server_bundle_js_file if server_bundle_js_file.present?
       files << rsc_bundle_js_file if rsc_bundle_js_file.present?
+      files << react_client_manifest_file if react_client_manifest_file.present?
+
       self.webpack_generated_files = files
     end
 
