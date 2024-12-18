@@ -199,13 +199,11 @@ module ReactOnRails
       redux_store_data = { store_name: store_name,
                            props: props }
       if defer
-        @registered_stores_defer_render ||= []
-        @registered_stores_defer_render << redux_store_data
+        registered_stores_defer_render << redux_store_data
         "YOU SHOULD NOT SEE THIS ON YOUR VIEW -- Uses as a code block, like <% redux_store %> " \
           "and not <%= redux store %>"
       else
-        @registered_stores ||= []
-        @registered_stores << redux_store_data
+        registered_stores << redux_store_data
         result = render_redux_store_data(redux_store_data)
         prepend_render_rails_context(result)
       end
@@ -217,9 +215,9 @@ module ReactOnRails
     # client side rendering of this hydration data, which is a hidden div with a matching class
     # that contains a data props.
     def redux_store_hydration_data
-      return if @registered_stores_defer_render.blank?
+      return if registered_stores_defer_render.blank?
 
-      @registered_stores_defer_render.reduce(+"") do |accum, redux_store_data|
+      registered_stores_defer_render.reduce(+"") do |accum, redux_store_data|
         accum << render_redux_store_data(redux_store_data)
       end.html_safe
     end
@@ -403,12 +401,20 @@ module ReactOnRails
     end
 
     def registered_stores
-      (@registered_stores || []) + (@registered_stores_defer_render || [])
+      @registered_stores ||= []
+    end
+
+    def registered_stores_defer_render
+      @registered_stores_defer_render ||= []
+    end
+
+    def registered_stores_including_deferred
+      registered_stores + registered_stores_defer_render
     end
 
     def create_render_options(react_component_name, options)
       # If no store dependencies are passed, default to all registered stores up till now
-      options[:store_dependencies] ||= registered_stores.map { |store| store[:store_name] }
+      options[:store_dependencies] ||= registered_stores_including_deferred.map { |store| store[:store_name] }
       ReactOnRails::ReactComponent::RenderOptions.new(react_component_name: react_component_name,
                                                       options: options)
     end
@@ -727,7 +733,7 @@ ReactOnRails.reactOnRailsComponentLoaded('#{render_options.dom_id}');
       return result unless store_dependencies.present?
 
       declarations = +"var reduxProps, store, storeGenerator;\n"
-      store_objects = registered_stores.select { |store| store_dependencies.include?(store[:store_name]) }
+      store_objects = registered_stores_including_deferred.select { |store| store_dependencies.include?(store[:store_name]) }
 
       result << store_objects.each_with_object(declarations) do |redux_store_data, memo|
         store_name = redux_store_data[:store_name]
