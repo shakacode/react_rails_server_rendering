@@ -530,8 +530,13 @@ module ReactOnRails
     end
 
     def compose_react_component_html_with_spec_and_console(component_specification_tag, rendered_output, console_script, dom_id = nil)
-      add_component_to_pending_hydration_code = "window.#{ADD_COMPONENT_TO_PENDING_HYDRATION_FUNCTION}('#{dom_id}');"
-      hydrate_script = dom_id.present? ? content_tag(:script, add_component_to_pending_hydration_code.html_safe) : ""
+      hydrate_script = if dom_id.present?
+        add_component_to_pending_hydration_code = "window.#{ADD_COMPONENT_TO_PENDING_HYDRATION_FUNCTION}('#{dom_id}');"
+        content_tag(:script, add_component_to_pending_hydration_code.html_safe)
+      else
+        ""
+      end
+
       # IMPORTANT: Ensure that we mark string as html_safe to avoid escaping.
       html_content = <<~HTML
         #{rendered_output}

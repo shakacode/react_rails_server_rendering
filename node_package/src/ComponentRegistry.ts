@@ -1,9 +1,14 @@
 import React from 'react';
-import type { RegisteredComponent, ReactComponentOrRenderFunction, RenderFunction, ReactComponent } from './types/index';
+import {
+  type RegisteredComponent,
+  type ReactComponentOrRenderFunction,
+  type RenderFunction,
+  type ComponentRegistrationCallback,
+} from './types';
 import isRenderFunction from './isRenderFunction';
 
 const registeredComponents = new Map<string, RegisteredComponent>();
-const registrationCallbacks = new Map<string, Array<(component: RegisteredComponent) => void>>();
+const registrationCallbacks = new Map<string, Array<ComponentRegistrationCallback>>();
 
 export default {
   /**
@@ -12,8 +17,8 @@ export default {
    * @param callback Function called with the component details when registered
    */
   onComponentRegistered(
-    componentName: string, 
-    callback: (component: RegisteredComponent) => void
+    componentName: string,
+    callback: (component: RegisteredComponent) => void,
   ): void {
     // If component is already registered, schedule callback
     const existingComponent = registeredComponents.get(componentName);
@@ -63,7 +68,7 @@ export default {
 
   registerServerComponent(...componentNames: string[]): void {
     // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
-    const RSCClientRoot = require('./RSCClientRoot').default;
+    const RSCClientRoot = (require('./RSCClientRoot') as typeof import('./RSCClientRoot')).default;
 
     const componentsWrappedInRSCClientRoot = componentNames.reduce(
       (acc, name) => ({ ...acc, [name]: () => React.createElement(RSCClientRoot, { componentName: name }) }),

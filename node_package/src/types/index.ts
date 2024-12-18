@@ -1,3 +1,6 @@
+// eslint-disable-next-line spaced-comment
+/// <reference types="react/experimental" />
+
 import type { ReactElement, ReactNode, Component, ComponentType } from 'react';
 import type { Readable, PassThrough } from 'stream';
 
@@ -103,6 +106,8 @@ export interface RegisteredComponent {
   // All renderer functions are render functions, but not all render functions are renderer functions.
   isRenderer: boolean;
 }
+
+export type ComponentRegistrationCallback = (component: RegisteredComponent) => void;
 
 interface Params {
   props?: Record<string, unknown>;
