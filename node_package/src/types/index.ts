@@ -107,7 +107,7 @@ export interface RegisteredComponent {
   isRenderer: boolean;
 }
 
-export type ComponentRegistrationCallback = (component: RegisteredComponent) => void;
+export type ItemRegistrationCallback<T> = (component: T) => void;
 
 interface Params {
   props?: Record<string, unknown>;
