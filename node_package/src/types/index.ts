@@ -166,9 +166,8 @@ export interface ReactOnRails {
   setOptions(newOptions: {traceTurbolinks: boolean}): void;
   reactHydrateOrRender(domNode: Element, reactElement: ReactElement, hydrate: boolean): RenderReturnType;
   reactOnRailsPageLoaded(): void;
-  renderOrHydrateLoadedComponents(): void;
-  hydratePendingStores(): void;
   reactOnRailsComponentLoaded(domId: string): void;
+  reactOnRailsStoreLoaded(storeName: string): void;
   authenticityToken(): string | null;
   authenticityHeaders(otherHeaders: { [id: string]: string }): AuthenticityHeaders;
   option(key: string): string | number | boolean | undefined;

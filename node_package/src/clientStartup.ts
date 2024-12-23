@@ -1,38 +1,15 @@
-import ReactDOM from 'react-dom';
-import type { ReactElement } from 'react';
-import type {
-  RailsContext,
-  ReactOnRails as ReactOnRailsType,
-  RegisteredComponent,
-  RenderFunction,
-  Root,
-} from './types';
-
-import createReactOutput from './createReactOutput';
-import { isServerRenderHash } from './isServerRenderResult';
-import reactHydrateOrRender from './reactHydrateOrRender';
-import { supportsRootApi } from './reactApis';
+import { reactOnRailsContext, type Context } from './context';
+import {
+  renderOrHydrateForceLoadedComponents,
+  renderOrHydrateAllComponents,
+  hydrateForceLoadedStores,
+  hydrateAllStores,
+  unmountAll,
+} from './ClientSideRenderer';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 declare global {
-  interface Window {
-    ReactOnRails: ReactOnRailsType;
-    __REACT_ON_RAILS_EVENT_HANDLERS_RAN_ONCE__?: boolean;
-    roots: Root[];
-    REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS?: string[];
-    REACT_ON_RAILS_PENDING_STORE_NAMES?: string[];
-    REACT_ON_RAILS_UNMOUNTED_BEFORE?: boolean;
-  }
-
-  namespace NodeJS {
-    interface Global {
-      ReactOnRails: ReactOnRailsType;
-      roots: Root[];
-      REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS?: string[];
-      REACT_ON_RAILS_PENDING_STORE_NAMES?: string[];
-    }
-  }
   namespace Turbolinks {
     interface TurbolinksStatic {
       controller?: unknown;
@@ -40,30 +17,13 @@ declare global {
   }
 }
 
-declare const ReactOnRails: ReactOnRailsType;
-
-const REACT_ON_RAILS_STORE_ATTRIBUTE = 'data-js-react-on-rails-store';
-
-type Context = Window | NodeJS.Global;
-
-function findContext(): Context {
-  if (typeof window.ReactOnRails !== 'undefined') {
-    return window;
-  } else if (typeof ReactOnRails !== 'undefined') {
-    return global;
-  }
-
-  throw new Error(`\
-ReactOnRails is undefined in both global and window namespaces.
-  `);
-}
 
 function debugTurbolinks(...msg: string[]): void {
   if (!window) {
     return;
   }
 
-  const context = findContext();
+  const context = reactOnRailsContext();
   if (context.ReactOnRails && context.ReactOnRails.option('traceTurbolinks')) {
     console.log('TURBO:', ...msg);
   }
@@ -74,23 +34,11 @@ function turbolinksInstalled(): boolean {
 }
 
 function turboInstalled() {
-  const context = findContext();
+  const context = reactOnRailsContext();
   if (context.ReactOnRails) {
     return context.ReactOnRails.option('turbo') === true;
   }
   return false;
-}
-
-function reactOnRailsHtmlElements(): HTMLCollectionOf<Element> {
-  return document.getElementsByClassName('js-react-on-rails-component');
-}
-
-async function initializeStore(el: Element, context: Context, railsContext: RailsContext): Promise<void> {
-  const name = el.getAttribute(REACT_ON_RAILS_STORE_ATTRIBUTE) || '';
-  const props = (el.textContent !== null) ? JSON.parse(el.textContent) : {};
-  const storeGenerator = await context.ReactOnRails.getOrWaitForStoreGenerator(name);
-  const store = storeGenerator(props, railsContext);
-  context.ReactOnRails.setStore(name, store);
 }
 
 function turbolinksVersion5(): boolean {
@@ -101,201 +49,15 @@ function turbolinksSupported(): boolean {
   return Turbolinks.supported;
 }
 
-function delegateToRenderer(
-  componentObj: RegisteredComponent,
-  props: Record<string, string>,
-  railsContext: RailsContext,
-  domNodeId: string,
-  trace: boolean,
-): boolean {
-  const { name, component, isRenderer } = componentObj;
-
-  if (isRenderer) {
-    if (trace) {
-      console.log(`\
-DELEGATING TO RENDERER ${name} for dom node with id: ${domNodeId} with props, railsContext:`,
-        props, railsContext);
-    }
-
-    (component as RenderFunction)(props, railsContext, domNodeId);
-    return true;
-  }
-
-  return false;
-}
-
-function domNodeIdForEl(el: Element): string {
-  return el.getAttribute('data-dom-id') || '';
-}
-
-/**
- * Used for client rendering by ReactOnRails. Either calls ReactDOM.hydrate, ReactDOM.render, or
- * delegates to a renderer registered by the user.
- */
-async function render(el: Element, context: Context, railsContext: RailsContext): Promise<void> {
-  // This must match lib/react_on_rails/helper.rb
-  const name = el.getAttribute('data-component-name') || '';
-  const domNodeId = domNodeIdForEl(el);
-  const props = (el.textContent !== null) ? JSON.parse(el.textContent) : {};
-  const trace = el.getAttribute('data-trace') === 'true';
-
-  try {
-    const domNode = document.getElementById(domNodeId);
-    if (domNode) {
-      const componentObj = await context.ReactOnRails.getOrWaitForComponent(name);
-      if (delegateToRenderer(componentObj, props, railsContext, domNodeId, trace)) {
-        return;
-      }
-
-      // Hydrate if available and was server rendered
-      // @ts-expect-error potentially present if React 18 or greater
-      const shouldHydrate = !!(ReactDOM.hydrate || ReactDOM.hydrateRoot) && !!domNode.innerHTML;
-
-      const reactElementOrRouterResult = createReactOutput({
-        componentObj,
-        props,
-        domNodeId,
-        trace,
-        railsContext,
-        shouldHydrate,
-      });
-
-      if (isServerRenderHash(reactElementOrRouterResult)) {
-        throw new Error(`\
-You returned a server side type of react-router error: ${JSON.stringify(reactElementOrRouterResult)}
-You should return a React.Component always for the client side entry point.`);
-      } else {
-        const rootOrElement = reactHydrateOrRender(domNode, reactElementOrRouterResult as ReactElement, shouldHydrate);
-        if (supportsRootApi) {
-          context.roots.push(rootOrElement as Root);
-        }
-      }
-    }
-  } catch (e: any) {
-    console.error(e.message);
-    e.message = `ReactOnRails encountered an error while rendering component: ${name}. See above error message.`
-    throw e;
-  }
-}
-
-function parseRailsContext(): RailsContext | null {
-  const el = document.getElementById('js-react-on-rails-context');
-  if (!el) {
-    // The HTML page will not have an element with ID 'js-react-on-rails-context' if there are no
-    // react on rails components
-    return null;
-  }
-
-  if (!el.textContent) {
-    throw new Error('The HTML element with ID \'js-react-on-rails-context\' has no textContent');
-  }
-
-  return JSON.parse(el.textContent);
-}
-
-function getContextAndRailsContext(): { context: Context; railsContext: RailsContext | null } {
-  const railsContext = parseRailsContext();
-  const context = findContext();
-  
-  if (railsContext && supportsRootApi && !context.roots) {
-    context.roots = [];
-  }
-  
-  return { context, railsContext };
-}
-
-// TODO: remove it
 export function reactOnRailsPageLoaded(): void {
   debugTurbolinks('reactOnRailsPageLoaded');
-}
-
-async function renderUsingDomId(domId: string, context: Context, railsContext: RailsContext) {
-  const el = document.querySelector(`[data-dom-id=${domId}]`);
-  if (!el) return;
-
-  const storeDependencies = el.getAttribute('data-store-dependencies');
-  const storeDependenciesArray = storeDependencies ? JSON.parse(storeDependencies) as string[] : [];
-  if (storeDependenciesArray.length > 0) {
-    await Promise.all(storeDependenciesArray.map(storeName => context.ReactOnRails.getOrWaitForStore(storeName)));
-  }
-  await render(el, context, railsContext);
-}
-
-export async function renderOrHydrateLoadedComponents(): Promise<void> {
-  debugTurbolinks('renderOrHydrateLoadedComponents');
-
-  const { context, railsContext } = getContextAndRailsContext();
-  
-  if (!railsContext) return;
-
-  // copy and clear the pending dom ids, so they don't get processed again
-  const pendingDomIds = context.REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS ?? [];
-  context.REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS = [];
-  await Promise.all(
-    pendingDomIds.map(async (domId) => {
-      await renderUsingDomId(domId, context, railsContext);
-    })
-  );
-}
-
-export async function hydratePendingStores(): Promise<void> {
-  debugTurbolinks('hydratePendingStores');
-
-  const { context, railsContext } = getContextAndRailsContext();
-
-  if (!railsContext) return;
-
-  const pendingStoreNames = context.REACT_ON_RAILS_PENDING_STORE_NAMES ?? [];
-  context.REACT_ON_RAILS_PENDING_STORE_NAMES = [];
-  await Promise.all(pendingStoreNames.map(async (storeName) => {
-    const storeElement = document.querySelector(`[${REACT_ON_RAILS_STORE_ATTRIBUTE}=${storeName}]`);
-    if (!storeElement) throw new Error(`Store element with name ${storeName} not found`);
-    await initializeStore(storeElement, context, railsContext);
-  }));
-}
-
-export async function reactOnRailsComponentLoaded(domId: string): Promise<void> {
-  debugTurbolinks(`reactOnRailsComponentLoaded ${domId}`);
-
-  const { context, railsContext } = getContextAndRailsContext();
-  
-  // If no react on rails components
-  if (!railsContext) return;
-
-  await renderUsingDomId(domId, context, railsContext);
-}
-
-function unmount(el: Element): void {
-  const domNodeId = domNodeIdForEl(el);
-  const domNode = document.getElementById(domNodeId);
-  if (domNode === null) {
-    return;
-  }
-  try {
-    ReactDOM.unmountComponentAtNode(domNode);
-  } catch (e: any) {
-    console.info(`Caught error calling unmountComponentAtNode: ${e.message} for domNode`,
-      domNode, e);
-  }
+  hydrateAllStores();
+  renderOrHydrateAllComponents();
 }
 
 function reactOnRailsPageUnloaded(): void {
   debugTurbolinks('reactOnRailsPageUnloaded');
-  if (supportsRootApi) {
-    const { roots } = findContext();
-
-    // If no react on rails components
-    if (!roots) return;
-
-    for (const root of roots) {
-      root.unmount();
-    }
-  } else {
-    const els = reactOnRailsHtmlElements();
-    for (let i = 0; i < els.length; i += 1) {
-      unmount(els[i]);
-    }
-  }
+  unmountAll();
 }
 
 function renderInit(): void {
@@ -335,17 +97,6 @@ function isWindow(context: Context): context is Window {
   return (context as Window).document !== undefined;
 }
 
-function onPageReady(callback: () => void) {
-  if (document.readyState === "complete") {
-    callback();
-  } else {
-    document.addEventListener("readystatechange", function onReadyStateChange() {
-        onPageReady(callback);
-        document.removeEventListener("readystatechange", onReadyStateChange);
-    });
-  }
-}
-
 export function clientStartup(context: Context): void {
   // Check if server rendering
   if (!isWindow(context)) {
@@ -361,6 +112,12 @@ export function clientStartup(context: Context): void {
   // eslint-disable-next-line no-underscore-dangle, no-param-reassign
   context.__REACT_ON_RAILS_EVENT_HANDLERS_RAN_ONCE__ = true;
 
-  console.log('clientStartup');
-  onPageReady(renderInit);
+  if (document.readyState !== 'complete') {
+    // force loaded components and stores are rendered and hydrated immediately
+    renderOrHydrateForceLoadedComponents();
+    hydrateForceLoadedStores();
+
+    // Other components and stores are rendered and hydrated when the page is fully loaded
+    document.addEventListener('DOMContentLoaded', renderInit);
+  }
 }

@@ -17,8 +17,6 @@ module ReactOnRails
     include ReactOnRails::Utils::Required
 
     COMPONENT_HTML_KEY = "componentHtml"
-    ADD_COMPONENT_TO_PENDING_HYDRATION_FUNCTION = "$ROR_PC"
-    ADD_STORE_TO_PENDING_HYDRATION_FUNCTION = "$ROR_PS"
 
     # react_component_name: can be a React function or class component or a "Render-Function".
     # "Render-Functions" differ from a React function in that they take two parameters, the
@@ -126,6 +124,7 @@ module ReactOnRails
     # @option options [Boolean] :raise_on_prerender_error Set to true to raise exceptions during server-side rendering
     # Any other options are passed to the content tag, including the id.
     def stream_react_component(component_name, options = {})
+      options = options.merge(force_load: true) unless options.key?(:force_load)
       run_stream_inside_fiber do
         internal_stream_react_component(component_name, options)
       end
@@ -195,9 +194,12 @@ module ReactOnRails
     # props: Ruby Hash or JSON string which contains the properties to pass to the redux store.
     # Options
     #    defer: false -- pass as true if you wish to render this below your component.
-    def redux_store(store_name, props: {}, defer: false)
+    #    force_load: false -- pass as true if you wish to hydrate this store immediately instead of
+    #                        waiting for the page to load.
+    def redux_store(store_name, props: {}, defer: false, force_load: false)
       redux_store_data = { store_name: store_name,
-                           props: props }
+                           props: props,
+                           force_load: force_load }
       if defer
         registered_stores_defer_render << redux_store_data
         "YOU SHOULD NOT SEE THIS ON YOUR VIEW -- Uses as a code block, like <% redux_store %> " \
@@ -463,7 +465,7 @@ module ReactOnRails
 
       result_console_script = render_options.replay_console ? console_script : ""
       result = compose_react_component_html_with_spec_and_console(
-        component_specification_tag, rendered_output, result_console_script, render_options.dom_id
+        component_specification_tag, rendered_output, result_console_script
       )
 
       prepend_render_rails_context(result)
@@ -529,20 +531,13 @@ module ReactOnRails
       )
     end
 
-    def compose_react_component_html_with_spec_and_console(component_specification_tag, rendered_output, console_script, dom_id = nil)
-      hydrate_script = if dom_id.present?
-        add_component_to_pending_hydration_code = "window.#{ADD_COMPONENT_TO_PENDING_HYDRATION_FUNCTION}('#{dom_id}');"
-        content_tag(:script, add_component_to_pending_hydration_code.html_safe)
-      else
-        ""
-      end
-
+    def compose_react_component_html_with_spec_and_console(component_specification_tag, rendered_output,
+                                                           console_script)
       # IMPORTANT: Ensure that we mark string as html_safe to avoid escaping.
       html_content = <<~HTML
         #{rendered_output}
               #{component_specification_tag}
               #{console_script}
-              #{hydrate_script}
       HTML
       html_content.strip.html_safe
     end
@@ -554,30 +549,10 @@ module ReactOnRails
 
       @rendered_rails_context = true
 
-      rails_context_tag = content_tag(:script,
-                                      json_safe_and_pretty(data).html_safe,
-                                      type: "application/json",
-                                      id: "js-react-on-rails-context")
-      
-      pending_hydration_script = <<~JS.strip_heredoc
-        window.REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS = [];
-        window.REACT_ON_RAILS_PENDING_STORE_NAMES = [];
-        window.#{ADD_COMPONENT_TO_PENDING_HYDRATION_FUNCTION} = function(domId) {
-          window.REACT_ON_RAILS_PENDING_COMPONENT_DOM_IDS.push(domId);
-          if (window.ReactOnRails) {
-            window.ReactOnRails.renderOrHydrateLoadedComponents();
-          }
-        };
-        window.#{ADD_STORE_TO_PENDING_HYDRATION_FUNCTION} = function(storeName) {
-          window.REACT_ON_RAILS_PENDING_STORE_NAMES.push(storeName);
-          if (window.ReactOnRails) {
-            window.ReactOnRails.hydratePendingStores();
-          }
-        };
-      JS
-      rails_context_tag.concat(
-        content_tag(:script, pending_hydration_script.html_safe)
-      ).html_safe
+      content_tag(:script,
+                  json_safe_and_pretty(data).html_safe,
+                  type: "application/json",
+                  id: "js-react-on-rails-context")
     end
 
     # prepend the rails_context if not yet applied
@@ -606,7 +581,7 @@ module ReactOnRails
                                                 "data-trace" => (render_options.trace ? true : nil),
                                                 "data-dom-id" => render_options.dom_id,
                                                 "data-store-dependencies" => render_options.store_dependencies.to_json,
-                                                )
+                                                "data-force-load" => (render_options.force_load ? true : nil))
 
       if render_options.force_load
         component_specification_tag.concat(
@@ -629,16 +604,21 @@ ReactOnRails.reactOnRailsComponentLoaded('#{render_options.dom_id}');
 
     def render_redux_store_data(redux_store_data)
       store_hydration_data = content_tag(:script,
-                           json_safe_and_pretty(redux_store_data[:props]).html_safe,
-                           type: "application/json",
-                           "data-js-react-on-rails-store" => redux_store_data[:store_name].html_safe)
-      hydration_code = "window.#{ADD_STORE_TO_PENDING_HYDRATION_FUNCTION}('#{redux_store_data[:store_name]}');"
-      store_hydration_script = content_tag(:script, hydration_code.html_safe)
+                                         json_safe_and_pretty(redux_store_data[:props]).html_safe,
+                                         type: "application/json",
+                                         "data-js-react-on-rails-store" => redux_store_data[:store_name].html_safe,
+                                         "data-force-load" => (redux_store_data[:force_load] ? true : nil))
 
-      prepend_render_rails_context <<~HTML
-        #{store_hydration_data}
-        #{store_hydration_script}
-      HTML
+      if redux_store_data[:force_load]
+        store_hydration_data.concat(
+          content_tag(:script, <<~JS.strip_heredoc.html_safe
+            ReactOnRails.reactOnRailsStoreLoaded('#{redux_store_data[:store_name]}');
+          JS
+          )
+        )
+      end
+
+      prepend_render_rails_context(store_hydration_data)
     end
 
     def props_string(props)
@@ -738,7 +718,9 @@ ReactOnRails.reactOnRailsComponentLoaded('#{render_options.dom_id}');
       return result unless store_dependencies.present?
 
       declarations = +"var reduxProps, store, storeGenerator;\n"
-      store_objects = registered_stores_including_deferred.select { |store| store_dependencies.include?(store[:store_name]) }
+      store_objects = registered_stores_including_deferred.select do |store|
+        store_dependencies.include?(store[:store_name])
+      end
 
       result << store_objects.each_with_object(declarations) do |redux_store_data, memo|
         store_name = redux_store_data[:store_name]
