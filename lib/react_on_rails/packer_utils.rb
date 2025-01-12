@@ -45,6 +45,10 @@ module ReactOnRails
       packer.dev_server.running?
     end
 
+    def self.dev_server_url
+      "#{packer.dev_server.protocol}://#{packer.dev_server.host_with_port}"
+    end
+
     def self.shakapacker_version
       return @shakapacker_version if defined?(@shakapacker_version)
       return nil unless ReactOnRails::Utils.gem_available?("shakapacker")
@@ -79,9 +83,24 @@ module ReactOnRails
 
       if packer.dev_server.running? && (!is_bundle_running_on_server ||
         ReactOnRails.configuration.same_bundle_for_client_and_server)
-        "#{packer.dev_server.protocol}://#{packer.dev_server.host_with_port}#{hashed_bundle_name}"
+        "#{dev_server_url}#{hashed_bundle_name}"
       else
         File.expand_path(File.join("public", hashed_bundle_name)).to_s
+      end
+    end
+
+    def self.public_output_uri_path
+      "#{packer.config.public_output_path.relative_path_from(packer.config.public_path)}/"
+    end
+
+    # The function doesn't ensure that the asset exists.
+    # - It just returns url to the asset if dev server is running
+    # - Otherwise it returns file path to the asset
+    def self.asset_uri_from_packer(asset_name)
+      if dev_server_running?
+        "#{dev_server_url}/#{public_output_uri_path}#{asset_name}"
+      else
+        File.join(packer_public_output_path, asset_name).to_s
       end
     end
 

@@ -493,6 +493,73 @@ module ReactOnRails
         end
       end
     end
+
+    describe ".react_client_manifest_file_path" do
+      before do
+        described_class.instance_variable_set(:@react_client_manifest_path, nil)
+        allow(ReactOnRails.configuration).to receive(:react_client_manifest_file)
+          .and_return("react-client-manifest.json")
+      end
+
+      after do
+        described_class.instance_variable_set(:@react_client_manifest_path, nil)
+      end
+
+      context "when using packer" do
+        let(:public_output_path) { "/path/to/public/webpack/dev" }
+
+        before do
+          allow(ReactOnRails::PackerUtils).to receive(:using_packer?).and_return(true)
+          allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("config.public_output_path")
+            .and_return(Pathname.new(public_output_path))
+          allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("config.public_path")
+            .and_return(Pathname.new("/path/to/public"))
+        end
+
+        context "when dev server is running" do
+          before do
+            allow(ReactOnRails::PackerUtils.packer).to receive(:dev_server).and_return(
+              instance_double(
+                Object.const_get(ReactOnRails::PackerUtils.packer_type.capitalize)::DevServer,
+                running?: true,
+                protocol: "http",
+                host_with_port: "localhost:3035"
+              )
+            )
+          end
+
+          it "returns manifest URL with dev server path" do
+            expected_url = "http://localhost:3035/webpack/dev/react-client-manifest.json"
+            expect(described_class.react_client_manifest_file_path).to eq(expected_url)
+          end
+        end
+
+        context "when dev server is not running" do
+          before do
+            allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("dev_server.running?")
+              .and_return(false)
+          end
+
+          it "returns file path to the manifest" do
+            expected_path = File.join(public_output_path, "react-client-manifest.json")
+            expect(described_class.react_client_manifest_file_path).to eq(expected_path)
+          end
+        end
+      end
+
+      context "when not using packer" do
+        before do
+          allow(ReactOnRails::PackerUtils).to receive(:using_packer?).and_return(false)
+          allow(described_class).to receive(:generated_assets_full_path)
+            .and_return("/path/to/generated/assets")
+        end
+
+        it "returns joined path with generated_assets_full_path" do
+          expect(described_class.react_client_manifest_file_path)
+            .to eq("/path/to/generated/assets/react-client-manifest.json")
+        end
+      end
+    end
   end
 end
 # rubocop:enable Metrics/ModuleLength, Metrics/BlockLength

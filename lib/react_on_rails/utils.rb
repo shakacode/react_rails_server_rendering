@@ -113,7 +113,11 @@ module ReactOnRails
       return @react_client_manifest_path if @react_client_manifest_path && !Rails.env.development?
 
       file_name = ReactOnRails.configuration.react_client_manifest_file
-      @react_client_manifest_path = bundle_js_file_path(file_name)
+      @react_client_manifest_path = if ReactOnRails::PackerUtils.using_packer?
+                                      ReactOnRails::PackerUtils.asset_uri_from_packer(file_name)
+                                    else
+                                      File.join(generated_assets_full_path, file_name)
+                                    end
     end
 
     def self.running_on_windows?
