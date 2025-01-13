@@ -21,6 +21,7 @@ import type {
   AuthenticityHeaders,
   Store,
   StoreGenerator,
+  RegisterServerComponentOptions,
 } from './types';
 import reactHydrateOrRender from './reactHydrateOrRender';
 
@@ -62,8 +63,8 @@ ctx.ReactOnRails = {
    * When it's rendered, a call will be made to the server to render it.
    * @param componentNames
    */
-  registerServerComponent(...componentNames: string[]): void {
-    ComponentRegistry.registerServerComponent(...componentNames);
+  registerServerComponent(options: RegisterServerComponentOptions, ...componentNames: string[]): void {
+    ComponentRegistry.registerServerComponent(options, ...componentNames);
   },
 
   registerStore(stores: { [id: string]: StoreGenerator }): void {

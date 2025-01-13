@@ -82,7 +82,7 @@ module ReactOnRails
       it "generated pack for ComponentWithCommonOnly uses common file for pack" do
         pack_content = File.read(component_pack)
 
-        expect(pack_content).to include("#{component_name}.jsx")
+        expect(pack_content).to include("#{component_namspec / dummy / spec / packs_generator_spec.rbe}.jsx")
         expect(pack_content).not_to include("#{component_name}.client.jsx")
         expect(pack_content).not_to include("#{component_name}.server.jsx")
       end
@@ -297,6 +297,7 @@ module ReactOnRails
 
       context "with simple content" do
         let(:content) { "const x = 1;" }
+
         it { is_expected.to eq "const x = 1;" }
       end
 
@@ -309,6 +310,7 @@ module ReactOnRails
             const y = 2;
           JS
         end
+
         it { is_expected.to eq "const x = 1;" }
       end
 
@@ -320,6 +322,7 @@ module ReactOnRails
             const x = 1;
           JS
         end
+
         it { is_expected.to eq "const x = 1;" }
       end
 
@@ -333,6 +336,7 @@ module ReactOnRails
             const x = 1;
           JS
         end
+
         it { is_expected.to eq "const x = 1;" }
       end
 
@@ -341,7 +345,7 @@ module ReactOnRails
           <<~JS
 
             // First comment
-              
+            #{'  '}
             /*
               multiline comment
             */
@@ -354,6 +358,7 @@ module ReactOnRails
             const x = 1;
           JS
         end
+
         it { is_expected.to eq "const x = 1;" }
       end
 
@@ -364,26 +369,31 @@ module ReactOnRails
             /* Another comment */
           JS
         end
+
         it { is_expected.to eq "" }
       end
 
       context "with comment at end of file" do
         let(:content) { "const x = 1;\n// Final comment" }
+
         it { is_expected.to eq "const x = 1;" }
       end
 
       context "with empty content" do
         let(:content) { "" }
+
         it { is_expected.to eq "" }
       end
 
       context "with only whitespace" do
         let(:content) { "   \n  \t  " }
+
         it { is_expected.to eq "" }
       end
 
       context "with statement containing comment-like strings" do
         let(:content) { 'const url = "http://example.com"; // Real comment' }
+
         # it returns the statement starting from non-space character until the next line even if it contains a comment
         it { is_expected.to eq 'const url = "http://example.com"; // Real comment' }
       end
@@ -396,6 +406,7 @@ module ReactOnRails
             const x = 1;
           JS
         end
+
         it { is_expected.to eq "" }
       end
 
@@ -406,16 +417,19 @@ module ReactOnRails
             const x = 1;
           JS
         end
+
         it { is_expected.to eq "const x = 1;" }
       end
 
       context "with one line comment with no space after //" do
         let(:content) { "//const x = 1;" }
+
         it { is_expected.to eq "" }
       end
 
       context "with one line comment with no new line after it" do
         let(:content) { "// const x = 1" }
+
         it { is_expected.to eq "" }
       end
 
@@ -428,14 +442,16 @@ module ReactOnRails
               const b = 2;
             JS
           end
+
           it { is_expected.to eq '"use client";' }
         end
-  
+
         context "on top of the file and one line comment" do
           let(:content) { '"use client"; // const x = 1' }
+
           it { is_expected.to eq '"use client"; // const x = 1' }
         end
-  
+
         context "after some one-line comments" do
           let(:content) do
             <<~JS
@@ -444,6 +460,7 @@ module ReactOnRails
               "use client";
             JS
           end
+
           it { is_expected.to eq '"use client";' }
         end
 
@@ -457,6 +474,7 @@ module ReactOnRails
               "use client";
             JS
           end
+
           it { is_expected.to eq '"use client";' }
         end
 
@@ -470,6 +488,7 @@ module ReactOnRails
               "use client";
             JS
           end
+
           it { is_expected.to eq '"use client";' }
         end
 
@@ -481,14 +500,15 @@ module ReactOnRails
               "use client";
             JS
           end
-          it { is_expected.to eq 'const x = 1;' }
+
+          it { is_expected.to eq "const x = 1;" }
         end
       end
     end
 
-    describe "#is_client_entrypoint?", :focus do
+    describe "#is_client_entrypoint?" do
       subject { described_class.instance.send(:is_client_entrypoint?, "dummy_path.js") }
-      
+
       before do
         allow(File).to receive(:read).with("dummy_path.js").and_return(content)
       end
@@ -496,21 +516,25 @@ module ReactOnRails
       context "when file has 'use client' directive" do
         context "with double quotes" do
           let(:content) { '"use client";' }
+
           it { is_expected.to be true }
         end
 
         context "with single quotes" do
           let(:content) { "'use client';" }
+
           it { is_expected.to be true }
         end
 
         context "without semicolon" do
           let(:content) { '"use client"' }
+
           it { is_expected.to be true }
         end
 
         context "with trailing whitespace" do
           let(:content) { '"use client"  ' }
+
           it { is_expected.to be true }
         end
 
@@ -523,6 +547,7 @@ module ReactOnRails
               "use client";
             JS
           end
+
           it { is_expected.to be true }
         end
       end
@@ -530,16 +555,19 @@ module ReactOnRails
       context "when file does not have 'use client' directive" do
         context "with empty file" do
           let(:content) { "" }
+
           it { is_expected.to be false }
         end
 
         context "with regular JS code" do
           let(:content) { "const x = 1;" }
+
           it { is_expected.to be false }
         end
 
         context "with 'use client' in a comment" do
           let(:content) { "// 'use client'" }
+
           it { is_expected.to be false }
         end
 
@@ -550,11 +578,13 @@ module ReactOnRails
               "use client";
             JS
           end
+
           it { is_expected.to be false }
         end
 
         context "with similar but incorrect directive" do
-          let(:content) { 'use client;' } # without quotes
+          let(:content) { "use client;" } # without quotes
+
           it { is_expected.to be false }
         end
       end

@@ -107,6 +107,10 @@ export interface RegisteredComponent {
   isRenderer: boolean;
 }
 
+export interface RegisterServerComponentOptions {
+  rscRenderingUrlPath: string;
+}
+
 export type ItemRegistrationCallback<T> = (component: T) => void;
 
 interface Params {
@@ -156,7 +160,7 @@ export type RenderReturnType = void | Element | Component | Root;
 
 export interface ReactOnRails {
   register(components: { [id: string]: ReactComponentOrRenderFunction }): void;
-  registerServerComponent(...componentNames: string[]): void;
+  registerServerComponent(options: RegisterServerComponentOptions, ...componentNames: string[]): void;
   /** @deprecated Use registerStoreGenerators instead */
   registerStore(stores: { [id: string]: StoreGenerator }): void;
   registerStoreGenerators(storeGenerators: { [id: string]: StoreGenerator }): void;

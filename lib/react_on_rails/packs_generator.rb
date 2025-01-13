@@ -46,30 +46,30 @@ module ReactOnRails
 
     def first_js_statement_in_code(content)
       return "" if content.nil? || content.empty?
-      
+
       start_index = 0
       content_length = content.length
-      
+
       while start_index < content_length
         # Skip whitespace
-        while start_index < content_length && content[start_index].match?(/\s/)
-          start_index += 1
-        end
-        
+        start_index += 1 while start_index < content_length && content[start_index].match?(/\s/)
+
         break if start_index >= content_length
-        
+
         current_chars = content[start_index, 2]
-        
+
         case current_chars
-        when '//'
+        when "//"
           # Single-line comment
           newline_index = content.index("\n", start_index)
           return "" if newline_index.nil?
+
           start_index = newline_index + 1
-        when '/*'
+        when "/*"
           # Multi-line comment
-          comment_end = content.index('*/', start_index)
+          comment_end = content.index("*/", start_index)
           return "" if comment_end.nil?
+
           start_index = comment_end + 2
         else
           # Found actual content
@@ -89,9 +89,21 @@ module ReactOnRails
 
     def pack_file_contents(file_path)
       registered_component_name = component_name(file_path)
-      register_as_server_component = ReactOnRails.configuration.auto_load_server_components && !is_client_entrypoint?(file_path)
-      import_statement = register_as_server_component ? "" : "import #{registered_component_name} from '#{relative_component_path_from_generated_pack(file_path)}';"
-      register_call = register_as_server_component ? "registerServerComponent(\"#{registered_component_name}\")" : "register({#{registered_component_name}})";
+      load_server_components = ReactOnRails::Utils.react_on_rails_pro? && ReactOnRailsPro.configuration.enable_rsc_support
+
+      if load_server_components && !is_client_entrypoint?(file_path)
+        import_statement = ""
+        rsc_rendering_url_path = ReactOnRailsPro.configuration.rsc_rendering_url_path
+        register_call = <<~REGISTER_CALL.strip
+          registerServerComponent({
+            rscRenderingUrlPath: "#{rsc_rendering_url_path}",
+          }, "#{registered_component_name}")
+        REGISTER_CALL
+      else
+        relative_component_path = relative_component_path_from_generated_pack(file_path)
+        import_statement = "import #{registered_component_name} from '#{relative_component_path}';"
+        register_call = "register({#{registered_component_name}})"
+      end
 
       <<~FILE_CONTENT
         import ReactOnRails from 'react-on-rails';

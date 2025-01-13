@@ -9,13 +9,21 @@ const { use } = React;
 
 const renderCache: Record<string, Promise<React.ReactNode>> = {};
 
-const fetchRSC = ({ componentName }: { componentName: string }) => {
+export type RSCClientRootProps = {
+  componentName: string;
+  rscRenderingUrlPath: string;
+}
+
+const fetchRSC = ({ componentName, rscRenderingUrlPath }: RSCClientRootProps) => {
   if (!renderCache[componentName]) {
-    renderCache[componentName] = RSDWClient.createFromFetch(fetch(`/rsc/${componentName}`)) as Promise<React.ReactNode>;
+    renderCache[componentName] = RSDWClient.createFromFetch(fetch(`${rscRenderingUrlPath}/${componentName}`)) as Promise<React.ReactNode>;
   }
   return renderCache[componentName];
 }
 
-const RSCClientRoot = ({ componentName }: { componentName: string }) => use(fetchRSC({ componentName }));
+const RSCClientRoot = ({
+  componentName,
+  rscRenderingUrlPath,
+}: RSCClientRootProps) => use(fetchRSC({ componentName, rscRenderingUrlPath }));
 
 export default RSCClientRoot;

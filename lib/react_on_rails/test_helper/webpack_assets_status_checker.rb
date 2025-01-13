@@ -50,8 +50,8 @@ module ReactOnRails
       def all_compiled_assets
         @all_compiled_assets ||= begin
           webpack_generated_files = @webpack_generated_files.map do |bundle_name|
-            if bundle_name == ReactOnRails.configuration.server_bundle_js_file
-              ReactOnRails::Utils.server_bundle_js_file_path
+            if bundle_name == ReactOnRails.configuration.react_client_manifest_file
+              ReactOnRails::Utils.react_client_manifest_file_path
             else
               ReactOnRails::Utils.bundle_js_file_path(bundle_name)
             end
