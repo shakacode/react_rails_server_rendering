@@ -27,7 +27,8 @@ const createFromFetch = async (fetchPromise: Promise<Response>) => {
 
 const fetchRSC = ({ componentName, rscRenderingUrlPath }: RSCClientRootProps) => {
   if (!renderCache[componentName]) {
-    renderCache[componentName] = createFromFetch(fetch(`${rscRenderingUrlPath}/${componentName}`)) as Promise<React.ReactNode>;
+    const strippedUrlPath = rscRenderingUrlPath.replace(/^\/|\/$/g, '');
+    renderCache[componentName] = createFromFetch(fetch(`/${strippedUrlPath}/${componentName}`)) as Promise<React.ReactNode>;
   }
   return renderCache[componentName];
 }
