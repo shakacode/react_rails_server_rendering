@@ -1,7 +1,8 @@
-import type { Store, StoreGenerator } from './types';
+import CallbackRegistry from './CallbackRegistry';
+import type { Store, StoreGenerator, ItemRegistrationCallback } from './types';
 
-const registeredStoreGenerators = new Map<string, StoreGenerator>();
-const hydratedStores = new Map<string, Store>();
+const storeGeneratorRegistry = new CallbackRegistry<StoreGenerator>();
+const hydratedStoreRegistry = new CallbackRegistry<Store>();
 
 export default {
   /**
@@ -10,7 +11,7 @@ export default {
    */
   register(storeGenerators: { [id: string]: StoreGenerator }): void {
     Object.keys(storeGenerators).forEach(name => {
-      if (registeredStoreGenerators.has(name)) {
+      if (storeGeneratorRegistry.has(name)) {
         console.warn('Called registerStore for store that is already registered', name);
       }
 
@@ -20,7 +21,7 @@ export default {
           `for the store generator with key ${name}.`);
       }
 
-      registeredStoreGenerators.set(name, store);
+      storeGeneratorRegistry.set(name, store);
     });
   },
 
@@ -32,11 +33,10 @@ export default {
    * @returns Redux Store, possibly hydrated
    */
   getStore(name: string, throwIfMissing = true): Store | undefined {
-    if (hydratedStores.has(name)) {
-      return hydratedStores.get(name);
-    }
+    const store = hydratedStoreRegistry.get(name);
+    if (store) return store;
 
-    const storeKeys = Array.from(hydratedStores.keys()).join(', ');
+    const storeKeys = Array.from(hydratedStoreRegistry.getAll().keys()).join(', ');
 
     if (storeKeys.length === 0) {
       const msg =
@@ -63,12 +63,10 @@ This can happen if you are server rendering and either:
    * @returns storeCreator with given name
    */
   getStoreGenerator(name: string): StoreGenerator {
-    const registeredStoreGenerator = registeredStoreGenerators.get(name);
-    if (registeredStoreGenerator) {
-      return registeredStoreGenerator;
-    }
+    const generator = storeGeneratorRegistry.get(name);
+    if (generator) return generator;
 
-    const storeKeys = Array.from(registeredStoreGenerators.keys()).join(', ');
+    const storeKeys = Array.from(storeGeneratorRegistry.getAll().keys()).join(', ');
     throw new Error(`Could not find store registered with name '${name}'. Registered store ` +
       `names include [ ${storeKeys} ]. Maybe you forgot to register the store?`);
   },
@@ -79,14 +77,14 @@ This can happen if you are server rendering and either:
    * @param store (not the storeGenerator, but the hydrated store)
    */
   setStore(name: string, store: Store): void {
-    hydratedStores.set(name, store);
+    hydratedStoreRegistry.set(name, store);
   },
 
   /**
    * Internally used function to completely clear hydratedStores Map.
    */
   clearHydratedStores(): void {
-    hydratedStores.clear();
+    hydratedStoreRegistry.clear();
   },
 
   /**
@@ -94,7 +92,7 @@ This can happen if you are server rendering and either:
    * @returns Map where key is the component name and values are the store generators.
    */
   storeGenerators(): Map<string, StoreGenerator> {
-    return registeredStoreGenerators;
+    return storeGeneratorRegistry.getAll();
   },
 
   /**
@@ -102,6 +100,42 @@ This can happen if you are server rendering and either:
    * @returns Map where key is the component name and values are the hydrated stores.
    */
   stores(): Map<string, Store> {
-    return hydratedStores;
+    return hydratedStoreRegistry.getAll();
+  },
+
+  /**
+   * Register a callback to be called when a specific store is hydrated
+   * @param storeName Name of the store to watch for
+   * @param callback Function called with the store when hydrated
+   */
+  onStoreHydrated(storeName: string, callback: ItemRegistrationCallback<Store>): void {
+    hydratedStoreRegistry.onItemRegistered(storeName, callback);
+  },
+
+  /**
+   * Used by components to get the hydrated store, waiting for it to be hydrated if necessary.
+   * @param name Name of the store to wait for
+   * @returns Promise that resolves with the Store once hydrated
+   */
+  getOrWaitForStore(name: string): Promise<Store> {
+    return hydratedStoreRegistry.getOrWaitForItem(name);
+  },
+
+  /**
+   * Register a callback to be called when a specific store generator is registered
+   * @param storeName Name of the store generator to watch for
+   * @param callback Function called with the store generator when registered
+   */
+  onStoreGeneratorRegistered(storeName: string, callback: ItemRegistrationCallback<StoreGenerator>): void {
+    storeGeneratorRegistry.onItemRegistered(storeName, callback);
+  },
+
+  /**
+   * Used by components to get the store generator, waiting for it to be registered if necessary.
+   * @param name Name of the store generator to wait for
+   * @returns Promise that resolves with the StoreGenerator once registered
+   */
+  getOrWaitForStoreGenerator(name: string): Promise<StoreGenerator> {
+    return storeGeneratorRegistry.getOrWaitForItem(name);
   },
 };

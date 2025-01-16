@@ -1,15 +1,35 @@
-import type { RegisteredComponent, ReactComponentOrRenderFunction, RenderFunction } from './types/index';
+import React from 'react';
+import {
+  type RegisteredComponent,
+  type ReactComponentOrRenderFunction,
+  type RenderFunction,
+  type ItemRegistrationCallback,
+  type RegisterServerComponentOptions,
+} from './types';
 import isRenderFunction from './isRenderFunction';
+import CallbackRegistry from './CallbackRegistry';
 
-const registeredComponents = new Map<string, RegisteredComponent>();
+const componentRegistry = new CallbackRegistry<RegisteredComponent>();
 
 export default {
+  /**
+   * Register a callback to be called when a specific component is registered
+   * @param componentName Name of the component to watch for
+   * @param callback Function called with the component details when registered
+   */
+  onComponentRegistered(
+    componentName: string,
+    callback: ItemRegistrationCallback<RegisteredComponent>,
+  ): void {
+    componentRegistry.onItemRegistered(componentName, callback);
+  },
+
   /**
    * @param components { component1: component1, component2: component2, etc. }
    */
   register(components: { [id: string]: ReactComponentOrRenderFunction }): void {
     Object.keys(components).forEach(name => {
-      if (registeredComponents.has(name)) {
+      if (componentRegistry.has(name)) {
         console.warn('Called register for component that is already registered', name);
       }
 
@@ -21,7 +41,7 @@ export default {
       const renderFunction = isRenderFunction(component);
       const isRenderer = renderFunction && (component as RenderFunction).length === 3;
 
-      registeredComponents.set(name, {
+      componentRegistry.set(name, {
         name,
         component,
         renderFunction,
@@ -30,19 +50,38 @@ export default {
     });
   },
 
+  registerServerComponent(options: RegisterServerComponentOptions, ...componentNames: string[]): void {
+    // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
+    const RSCClientRoot = (require('./RSCClientRoot') as typeof import('./RSCClientRoot')).default;
+
+    const componentsWrappedInRSCClientRoot = componentNames.reduce(
+      (acc, name) => ({
+        ...acc,
+        [name]: () => React.createElement(RSCClientRoot, {
+          componentName: name,
+          rscRenderingUrlPath: options.rscRenderingUrlPath
+        })
+      }),
+      {}
+    );
+    this.register(componentsWrappedInRSCClientRoot);
+  },
+
   /**
    * @param name
    * @returns { name, component, isRenderFunction, isRenderer }
    */
   get(name: string): RegisteredComponent {
-    const registeredComponent = registeredComponents.get(name);
-    if (registeredComponent !== undefined) {
-      return registeredComponent;
-    }
+    const component = componentRegistry.get(name);
+    if (component !== undefined) return component;
 
-    const keys = Array.from(registeredComponents.keys()).join(', ');
+    const keys = Array.from(componentRegistry.getAll().keys()).join(', ');
     throw new Error(`Could not find component registered with name ${name}. \
 Registered component names include [ ${keys} ]. Maybe you forgot to register the component?`);
+  },
+
+  getOrWaitForComponent(name: string): Promise<RegisteredComponent> {
+    return componentRegistry.getOrWaitForItem(name);
   },
 
   /**
@@ -51,6 +90,6 @@ Registered component names include [ ${keys} ]. Maybe you forgot to register the
    * { name, component, renderFunction, isRenderer}
    */
   components(): Map<string, RegisteredComponent> {
-    return registeredComponents;
+    return componentRegistry.getAll();
   },
 };

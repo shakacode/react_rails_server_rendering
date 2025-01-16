@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import type { Readable, PassThrough } from 'stream';
 
 import * as ClientStartup from './clientStartup';
+import { renderOrHydrateComponent, hydrateStore } from './ClientSideRenderer';
 import handleError from './handleError';
 import ComponentRegistry from './ComponentRegistry';
 import StoreRegistry from './StoreRegistry';
@@ -20,6 +21,7 @@ import type {
   AuthenticityHeaders,
   Store,
   StoreGenerator,
+  RegisterServerComponentOptions,
 } from './types';
 import reactHydrateOrRender from './reactHydrateOrRender';
 
@@ -55,6 +57,16 @@ ctx.ReactOnRails = {
     ComponentRegistry.register(components);
   },
 
+  /**
+   * Register a specific component as a server component.
+   * The component will not be included in the client bundle.
+   * When it's rendered, a call will be made to the server to render it.
+   * @param componentNames
+   */
+  registerServerComponent(options: RegisterServerComponentOptions, ...componentNames: string[]): void {
+    ComponentRegistry.registerServerComponent(options, ...componentNames);
+  },
+
   registerStore(stores: { [id: string]: StoreGenerator }): void {
     this.registerStoreGenerators(stores);
   },
@@ -85,6 +97,24 @@ ctx.ReactOnRails = {
    */
   getStore(name: string, throwIfMissing = true): Store | undefined {
     return StoreRegistry.getStore(name, throwIfMissing);
+  },
+
+  /**
+   * Get a store by name, or wait for it to be registered.
+   * @param name
+   * @returns Promise<Store>
+   */
+  getOrWaitForStore(name: string): Promise<Store> {
+    return StoreRegistry.getOrWaitForStore(name);
+  },
+
+  /**
+   * Get a store generator by name, or wait for it to be registered.
+   * @param name
+   * @returns Promise<StoreGenerator>
+   */
+  getOrWaitForStoreGenerator(name: string): Promise<StoreGenerator> {
+    return StoreRegistry.getOrWaitForStoreGenerator(name);
   },
 
   /**
@@ -137,7 +167,11 @@ ctx.ReactOnRails = {
   },
 
   reactOnRailsComponentLoaded(domId: string): void {
-    ClientStartup.reactOnRailsComponentLoaded(domId);
+    renderOrHydrateComponent(domId);
+  },
+
+  reactOnRailsStoreLoaded(storeName: string): void {
+    hydrateStore(storeName);
   },
 
   /**
@@ -238,6 +272,15 @@ ctx.ReactOnRails = {
    */
   getComponent(name: string): RegisteredComponent {
     return ComponentRegistry.get(name);
+  },
+
+  /**
+   * Get the component that you registered, or wait for it to be registered
+   * @param name
+   * @returns {name, component, renderFunction, isRenderer}
+   */
+  getOrWaitForComponent(name: string): Promise<RegisteredComponent> {
+    return ComponentRegistry.getOrWaitForComponent(name);
   },
 
   /**
