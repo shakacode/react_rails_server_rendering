@@ -13,6 +13,8 @@ module ReactOnRails
 
     before do
       allow(ReactOnRails::PackerUtils).to receive(:using_packer?).and_return(using_packer)
+      allow(ReactOnRails::Utils).to receive(:gem_available?).and_call_original
+      allow(ReactOnRails::Utils).to receive(:gem_available?).with("webpacker").and_return(false)
       ReactOnRails.instance_variable_set(:@configuration, nil)
     end
 

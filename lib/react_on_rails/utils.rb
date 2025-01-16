@@ -66,7 +66,7 @@ module ReactOnRails
       server_bundle_js_file_path =~ %r{https?://}
     end
 
-    def self.server_bundle_js_file_path
+    def self.bundle_js_file_path(bundle_name)
       # Either:
       # 1. Using same bundle for both server and client, so server bundle will be hashed in manifest
       # 2. Using a different bundle (different Webpack config), so file is not hashed, and
@@ -76,34 +76,37 @@ module ReactOnRails
       #    a. The webpack manifest plugin would have a race condition where the same manifest.json
       #       is edited by both the webpack-dev-server
       #    b. There is no good reason to hash the server bundle name.
-      return @server_bundle_path if @server_bundle_path && !Rails.env.development?
-
-      bundle_name = ReactOnRails.configuration.server_bundle_js_file
-      @server_bundle_path = if ReactOnRails::PackerUtils.using_packer?
-                              begin
-                                bundle_js_file_path(bundle_name)
-                              rescue Object.const_get(
-                                ReactOnRails::PackerUtils.packer_type.capitalize
-                              )::Manifest::MissingEntryError
-                                File.expand_path(
-                                  File.join(ReactOnRails::PackerUtils.packer_public_output_path,
-                                            bundle_name)
-                                )
-                              end
-                            else
-                              bundle_js_file_path(bundle_name)
-                            end
-    end
-
-    def self.bundle_js_file_path(bundle_name)
       if ReactOnRails::PackerUtils.using_packer? && bundle_name != "manifest.json"
-        ReactOnRails::PackerUtils.bundle_js_uri_from_packer(bundle_name)
+        begin
+          ReactOnRails::PackerUtils.bundle_js_uri_from_packer(bundle_name)
+        rescue Object.const_get(
+          ReactOnRails::PackerUtils.packer_type.capitalize
+        )::Manifest::MissingEntryError
+          File.expand_path(
+            File.join(ReactOnRails::PackerUtils.packer_public_output_path,
+                      bundle_name)
+          )
+        end
       else
         # Default to the non-hashed name in the specified output directory, which, for legacy
         # React on Rails, this is the output directory picked up by the asset pipeline.
         # For Shakapacker, this is the public output path defined in the (shaka/web)packer.yml file.
         File.join(generated_assets_full_path, bundle_name)
       end
+    end
+
+    def self.server_bundle_js_file_path
+      return @server_bundle_path if @server_bundle_path && !Rails.env.development?
+
+      bundle_name = ReactOnRails.configuration.server_bundle_js_file
+      @server_bundle_path = bundle_js_file_path(bundle_name)
+    end
+
+    def self.rsc_bundle_js_file_path
+      return @rsc_bundle_path if @rsc_bundle_path && !Rails.env.development?
+
+      bundle_name = ReactOnRails.configuration.rsc_bundle_js_file
+      @rsc_bundle_path = bundle_js_file_path(bundle_name)
     end
 
     def self.running_on_windows?

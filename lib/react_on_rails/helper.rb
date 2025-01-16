@@ -124,29 +124,15 @@ module ReactOnRails
     # @option options [Boolean] :raise_on_prerender_error Set to true to raise exceptions during server-side rendering
     # Any other options are passed to the content tag, including the id.
     def stream_react_component(component_name, options = {})
-      unless ReactOnRails::Utils.react_on_rails_pro?
-        raise ReactOnRails::Error,
-              "You must use React on Rails Pro to use the stream_react_component method."
+      run_stream_inside_fiber do
+        internal_stream_react_component(component_name, options)
       end
+    end
 
-      if @rorp_rendering_fibers.nil?
-        raise ReactOnRails::Error,
-              "You must call stream_view_containing_react_components to render the view containing the react component"
+    def rsc_react_component(component_name, options = {})
+      run_stream_inside_fiber do
+        internal_rsc_react_component(component_name, options)
       end
-
-      rendering_fiber = Fiber.new do
-        stream = internal_stream_react_component(component_name, options)
-        stream.each_chunk do |chunk|
-          Fiber.yield chunk
-        end
-      end
-
-      @rorp_rendering_fibers << rendering_fiber
-
-      # return the first chunk of the fiber
-      # It contains the initial html of the component
-      # all updates will be appended to the stream sent to browser
-      rendering_fiber.resume
     end
 
     # react_component_hash is used to return multiple HTML strings for server rendering, such as for
@@ -388,6 +374,32 @@ module ReactOnRails
 
     private
 
+    def run_stream_inside_fiber
+      unless ReactOnRails::Utils.react_on_rails_pro?
+        raise ReactOnRails::Error,
+              "You must use React on Rails Pro to use the stream_react_component method."
+      end
+
+      if @rorp_rendering_fibers.nil?
+        raise ReactOnRails::Error,
+              "You must call stream_view_containing_react_components to render the view containing the react component"
+      end
+
+      rendering_fiber = Fiber.new do
+        stream = yield
+        stream.each_chunk do |chunk|
+          Fiber.yield chunk
+        end
+      end
+
+      @rorp_rendering_fibers << rendering_fiber
+
+      # return the first chunk of the fiber
+      # It contains the initial html of the component
+      # all updates will be appended to the stream sent to browser
+      rendering_fiber.resume
+    end
+
     def internal_stream_react_component(component_name, options = {})
       options = options.merge(stream?: true)
       result = internal_react_component(component_name, options)
@@ -396,6 +408,15 @@ module ReactOnRails
         component_specification_tag: result[:tag],
         render_options: result[:render_options]
       )
+    end
+
+    def internal_rsc_react_component(react_component_name, options = {})
+      options = options.merge(rsc?: true)
+      render_options = create_render_options(react_component_name, options)
+      json_stream = server_rendered_react_component(render_options)
+      json_stream.transform do |chunk|
+        chunk[:html].html_safe
+      end
     end
 
     def generated_components_pack_path(component_name)
@@ -590,7 +611,7 @@ ReactOnRails.reactOnRailsComponentLoaded('#{render_options.dom_id}');
     end
 
     # Returns object with values that are NOT html_safe!
-    def server_rendered_react_component(render_options)
+    def server_rendered_react_component(render_options) # rubocop:disable Metrics/CyclomaticComplexity
       return { "html" => "", "consoleReplayScript" => "" } unless render_options.prerender
 
       react_component_name = render_options.react_component_name
@@ -635,6 +656,9 @@ ReactOnRails.reactOnRailsComponentLoaded('#{render_options.dom_id}');
                                                err: err,
                                                js_code: js_code)
       end
+
+      # TODO: handle errors for rsc streams
+      return result if render_options.rsc?
 
       if render_options.stream?
         result.transform do |chunk_json_result|

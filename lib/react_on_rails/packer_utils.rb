@@ -74,9 +74,10 @@ module ReactOnRails
       # the webpack-dev-server is provided by the config value
       # "same_bundle_for_client_and_server" where a value of true
       # would mean that the bundle is created by the webpack-dev-server
-      is_server_bundle = bundle_name == ReactOnRails.configuration.server_bundle_js_file
+      is_bundle_running_on_server = (bundle_name == ReactOnRails.configuration.server_bundle_js_file) ||
+                                    (bundle_name == ReactOnRails.configuration.rsc_bundle_js_file)
 
-      if packer.dev_server.running? && (!is_server_bundle ||
+      if packer.dev_server.running? && (!is_bundle_running_on_server ||
         ReactOnRails.configuration.same_bundle_for_client_and_server)
         "#{packer.dev_server.protocol}://#{packer.dev_server.host_with_port}#{hashed_bundle_name}"
       else

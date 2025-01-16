@@ -46,7 +46,7 @@ module ReactOnRails
         # Note, js_code does not have to be based on React.
         # js_code MUST RETURN json stringify Object
         # Calling code will probably call 'html_safe' on return value before rendering to the view.
-        # rubocop:disable Metrics/CyclomaticComplexity
+        # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
         def exec_server_render_js(js_code, render_options, js_evaluator = nil)
           js_evaluator ||= self
           if render_options.trace
@@ -56,7 +56,7 @@ module ReactOnRails
             @file_index += 1
           end
           begin
-            result = if render_options.stream?
+            result = if render_options.stream? || render_options.rsc?
                        js_evaluator.eval_streaming_js(js_code, render_options)
                      else
                        js_evaluator.eval_js(js_code, render_options)
@@ -76,13 +76,16 @@ module ReactOnRails
             raise ReactOnRails::Error, msg, err.backtrace
           end
 
-          return parse_result_and_replay_console_messages(result, render_options) unless render_options.stream?
+          unless render_options.stream? || render_options.rsc?
+            return parse_result_and_replay_console_messages(result,
+                                                            render_options)
+          end
 
           # Streamed component is returned as stream of strings.
           # We need to parse each chunk and replay the console messages.
           result.transform { |chunk| parse_result_and_replay_console_messages(chunk, render_options) }
         end
-        # rubocop:enable Metrics/CyclomaticComplexity
+        # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
         def trace_js_code_used(msg, js_code, file_name = "tmp/server-generated.js", force: false)
           return unless ReactOnRails.configuration.trace || force
@@ -227,6 +230,8 @@ module ReactOnRails
         end
 
         def parse_result_and_replay_console_messages(result_string, render_options)
+          return { html: result_string } if render_options.rsc?
+
           result = nil
           begin
             result = JSON.parse(result_string)

@@ -6,14 +6,124 @@ require ReactOnRails::PackerUtils.packer_type
 # rubocop:disable Metrics/ModuleLength, Metrics/BlockLength
 module ReactOnRails
   RSpec.describe Utils do
+    # Github Actions already run rspec tests two times, once with shakapacker and once with webpacker.
+    # If rspec tests are run locally, we want to test both packers.
+    # If rspec tests are run in CI, we want to test the packer specified in the CI_PACKER_VERSION environment variable.
+    # Check script/convert and .github/workflows/rspec-package-specs.yml for more details.
+    packers_to_test = if ENV["CI_PACKER_VERSION"] == "old"
+                        ["webpacker"]
+                      elsif ENV["CI_PACKER_VERSION"] == "new"
+                        ["shakapacker"]
+                      else
+                        %w[shakapacker webpacker]
+                      end
+
+    shared_context "with packer enabled" do
+      before do
+        allow(ReactOnRails).to receive_message_chain(:configuration, :generated_assets_dir)
+          .and_return("")
+        allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("dev_server.running?")
+          .and_return(false)
+        allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("config.public_output_path")
+          .and_return(packer_public_output_path)
+      end
+
+      it "uses packer" do
+        expect(ReactOnRails::PackerUtils.using_packer?).to be(true)
+      end
+    end
+
+    shared_context "with shakapacker enabled" do
+      include_context "with packer enabled"
+
+      # We don't need to mock anything here because the shakapacker gem is already installed and will be used by default
+      it "uses shakapacker" do
+        expect(ReactOnRails::PackerUtils.using_webpacker_const?).to be(false)
+        expect(ReactOnRails::PackerUtils.using_shakapacker_const?).to be(true)
+        expect(ReactOnRails::PackerUtils.packer_type).to eq("shakapacker")
+        expect(ReactOnRails::PackerUtils.packer).to eq(::Shakapacker)
+      end
+    end
+
+    shared_context "with webpacker enabled" do
+      include_context "with packer enabled"
+
+      it "uses webpacker" do
+        expect(ReactOnRails::PackerUtils.using_shakapacker_const?).to be(false)
+        expect(ReactOnRails::PackerUtils.using_webpacker_const?).to be(true)
+        expect(ReactOnRails::PackerUtils.packer_type).to eq("webpacker")
+        expect(ReactOnRails::PackerUtils.packer).to be_a(::Webpacker)
+      end
+    end
+
+    shared_context "without packer enabled" do
+      before do
+        allow(ReactOnRails).to receive_message_chain(:configuration, :generated_assets_dir)
+          .and_return("public/webpack/dev")
+        allow(described_class).to receive(:gem_available?).with("shakapacker").and_return(false)
+        allow(described_class).to receive(:gem_available?).with("webpacker").and_return(false)
+      end
+
+      it "does not use packer" do
+        expect(ReactOnRails::PackerUtils.using_packer?).to be(false)
+        expect(ReactOnRails::PackerUtils.packer_type).to be_nil
+        expect(ReactOnRails::PackerUtils.packer).to be_nil
+      end
+    end
+
+    def mock_bundle_in_manifest(bundle_name, hashed_bundle)
+      mock_manifest = instance_double(Object.const_get(ReactOnRails::PackerUtils.packer_type.capitalize)::Manifest)
+      allow(mock_manifest).to receive(:lookup!)
+        .with(bundle_name)
+        .and_return(hashed_bundle)
+
+      allow(ReactOnRails::PackerUtils.packer).to receive(:manifest).and_return(mock_manifest)
+    end
+
+    def mock_missing_manifest_entry(bundle_name)
+      allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("manifest.lookup!")
+        .with(bundle_name)
+        .and_raise(Object.const_get(
+          ReactOnRails::PackerUtils.packer_type.capitalize
+        )::Manifest::MissingEntryError)
+    end
+
+    def random_bundle_name
+      "webpack-bundle-#{SecureRandom.hex(4)}.js"
+    end
+
+    # If bundle names are not provided, random unique names will be used for each bundle.
+    # This ensures that if server_bundle and rsc_bundle are accidentally swapped in the code,
+    # the tests will fail since each bundle has a distinct random name that won't match if used incorrectly.
+    def mock_bundle_configs(server_bundle_name: random_bundle_name, rsc_bundle_name: random_bundle_name)
+      allow(ReactOnRails).to receive_message_chain("configuration.server_bundle_js_file")
+        .and_return(server_bundle_name)
+      allow(ReactOnRails).to receive_message_chain("configuration.rsc_bundle_js_file")
+        .and_return(rsc_bundle_name)
+    end
+
+    def mock_dev_server_running
+      allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("dev_server.running?")
+        .and_return(true)
+      allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("dev_server.protocol")
+        .and_return("http")
+      allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("dev_server.host_with_port")
+        .and_return("localhost:3035")
+    end
+
     context "when server_bundle_path cleared" do
       before do
         allow(Rails).to receive(:root).and_return(File.expand_path("."))
         described_class.instance_variable_set(:@server_bundle_path, nil)
+        described_class.instance_variable_set(:@rsc_bundle_path, nil)
+        ReactOnRails::PackerUtils.instance_variables.each do |instance_variable|
+          ReactOnRails::PackerUtils.remove_instance_variable(instance_variable)
+        end
       end
 
       after do
         described_class.instance_variable_set(:@server_bundle_path, nil)
+        described_class.instance_variable_set(:@rsc_bundle_path, nil)
       end
 
       describe ".bundle_js_file_path" do
@@ -21,51 +131,36 @@ module ReactOnRails
           described_class.bundle_js_file_path("webpack-bundle.js")
         end
 
-        context "with Shakapacker enabled", :shakapacker do
-          let(:packer_public_output_path) do
-            File.expand_path(File.join(Rails.root, "public/webpack/dev"))
-          end
+        packers_to_test.each do |packer_type|
+          context "with #{packer_type} enabled", packer_type.to_sym do
+            include_context "with #{packer_type} enabled"
 
-          before do
-            allow(ReactOnRails).to receive_message_chain(:configuration, :generated_assets_dir)
-              .and_return("")
-            allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.dev_server.running?")
-              .and_return(false)
-            allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.config.public_output_path")
-              .and_return(packer_public_output_path)
-            allow(ReactOnRails::PackerUtils).to receive(:using_packer?).and_return(true)
-          end
-
-          context "when file in manifest", :shakapacker do
-            before do
-              # Note Shakapacker manifest lookup is inside of the public_output_path
-              # [2] (pry) ReactOnRails::PackerUtils: 0> Shakapacker.manifest.lookup("app-bundle.js")
-              # "/webpack/development/app-bundle-c1d2b6ab73dffa7d9c0e.js"
-              allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.manifest.lookup!")
-                .with("webpack-bundle.js")
-                .and_return("/webpack/dev/webpack-bundle-0123456789abcdef.js")
-              allow(ReactOnRails).to receive_message_chain("configuration.server_bundle_js_file")
-                .and_return("server-bundle.js")
+            let(:packer_public_output_path) do
+              File.expand_path(File.join(Rails.root, "public/webpack/dev"))
             end
 
-            it { is_expected.to eq("#{packer_public_output_path}/webpack-bundle-0123456789abcdef.js") }
-          end
+            context "when file in manifest", :shakapacker do
+              before do
+                mock_bundle_in_manifest("webpack-bundle.js", "/webpack/dev/webpack-bundle-0123456789abcdef.js")
 
-          context "with manifest.json" do
-            subject do
-              described_class.bundle_js_file_path("manifest.json")
+                mock_bundle_configs(server_bundle_name: "server-bundle.js")
+              end
+
+              it { is_expected.to eq("#{packer_public_output_path}/webpack-bundle-0123456789abcdef.js") }
             end
 
-            it { is_expected.to eq("#{packer_public_output_path}/manifest.json") }
+            context "with manifest.json" do
+              subject do
+                described_class.bundle_js_file_path("manifest.json")
+              end
+
+              it { is_expected.to eq("#{packer_public_output_path}/manifest.json") }
+            end
           end
         end
 
         context "without a packer enabled" do
-          before do
-            allow(ReactOnRails).to receive_message_chain(:configuration, :generated_assets_dir)
-              .and_return("public/webpack/dev")
-            allow(ReactOnRails::PackerUtils).to receive(:using_packer?).and_return(false)
-          end
+          include_context "without packer enabled"
 
           it { is_expected.to eq(File.expand_path(File.join(Rails.root, "public/webpack/dev/webpack-bundle.js"))) }
         end
@@ -100,88 +195,130 @@ module ReactOnRails
         end
       end
 
-      describe ".server_bundle_js_file_path with Shakapacker enabled" do
-        before do
-          allow(Rails).to receive(:root).and_return(Pathname.new("."))
-          allow(ReactOnRails::PackerUtils).to receive(:using_packer?).and_return(true)
-          allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.config.public_output_path")
-            .and_return(Pathname.new("public/webpack/development"))
-        end
+      packers_to_test.each do |packer_type|
+        describe ".server_bundle_js_file_path with #{packer_type} enabled" do
+          let(:packer_public_output_path) { Pathname.new("public/webpack/development") }
 
-        context "with server file not in manifest", :shakapacker do
-          it "returns the unhashed server path" do
-            server_bundle_name = "server-bundle.js"
-            allow(ReactOnRails).to receive_message_chain("configuration.server_bundle_js_file")
-              .and_return(server_bundle_name)
-            allow(ReactOnRails::PackerUtils.packer).to receive_message_chain("manifest.lookup!")
-              .with(server_bundle_name)
-              .and_raise(Object.const_get(
-                ReactOnRails::PackerUtils.packer_type.capitalize
-              )::Manifest::MissingEntryError)
+          include_context "with #{packer_type} enabled"
 
-            path = described_class.server_bundle_js_file_path
-
-            expect(path).to end_with("public/webpack/development/#{server_bundle_name}")
-          end
-        end
-
-        context "with server file in the manifest, used for client", :shakapacker do
-          it "returns the correct path hashed server path" do
-            Packer = ReactOnRails::PackerUtils.packer # rubocop:disable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
-            allow(ReactOnRails).to receive_message_chain("configuration.server_bundle_js_file")
-              .and_return("webpack-bundle.js")
-            allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
-              .and_return(true)
-            allow(Packer).to receive_message_chain("manifest.lookup!")
-              .with("webpack-bundle.js")
-              .and_return("webpack/development/webpack-bundle-123456.js")
-            allow(Packer).to receive_message_chain("dev_server.running?")
-              .and_return(false)
-
-            path = described_class.server_bundle_js_file_path
-            expect(path).to end_with("public/webpack/development/webpack-bundle-123456.js")
-            expect(path).to start_with("/")
-          end
-
-          context "with webpack-dev-server running, and same file used for server and client" do
-            it "returns the correct path hashed server path" do
-              allow(ReactOnRails).to receive_message_chain("configuration.server_bundle_js_file")
-                .and_return("webpack-bundle.js")
-              allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
-                .and_return(true)
-              allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.dev_server.running?")
-                .and_return(true)
-              allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.dev_server.protocol")
-                .and_return("http")
-              allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.dev_server.host_with_port")
-                .and_return("localhost:3035")
-              allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.manifest.lookup!")
-                .with("webpack-bundle.js")
-                .and_return("/webpack/development/webpack-bundle-123456.js")
+          context "with server file not in manifest", packer_type.to_sym do
+            it "returns the unhashed server path" do
+              server_bundle_name = "server-bundle.js"
+              mock_bundle_configs(server_bundle_name: server_bundle_name)
+              mock_missing_manifest_entry(server_bundle_name)
 
               path = described_class.server_bundle_js_file_path
 
-              expect(path).to eq("http://localhost:3035/webpack/development/webpack-bundle-123456.js")
+              expect(path).to end_with("public/webpack/development/#{server_bundle_name}")
+            end
+          end
+
+          context "with server file in the manifest, used for client", packer_type.to_sym do
+            it "returns the correct path hashed server path" do
+              Packer = ReactOnRails::PackerUtils.packer # rubocop:disable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
+              mock_bundle_configs(server_bundle_name: "webpack-bundle.js")
+              allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
+                .and_return(true)
+              mock_bundle_in_manifest("webpack-bundle.js", "webpack/development/webpack-bundle-123456.js")
+              allow(Packer).to receive_message_chain("dev_server.running?")
+                .and_return(false)
+
+              path = described_class.server_bundle_js_file_path
+              expect(path).to end_with("public/webpack/development/webpack-bundle-123456.js")
+              expect(path).to start_with("/")
+            end
+
+            context "with webpack-dev-server running, and same file used for server and client" do
+              it "returns the correct path hashed server path" do
+                mock_bundle_configs(server_bundle_name: "webpack-bundle.js")
+                allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
+                  .and_return(true)
+                mock_dev_server_running
+                mock_bundle_in_manifest("webpack-bundle.js", "/webpack/development/webpack-bundle-123456.js")
+
+                path = described_class.server_bundle_js_file_path
+
+                expect(path).to eq("http://localhost:3035/webpack/development/webpack-bundle-123456.js")
+              end
+            end
+          end
+
+          context "with dev-server running, and server file in the manifest, and separate client/server files",
+                  packer_type.to_sym do
+            it "returns the correct path hashed server path" do
+              mock_bundle_configs(server_bundle_name: "server-bundle.js")
+              allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
+                .and_return(false)
+              mock_bundle_in_manifest("server-bundle.js", "webpack/development/server-bundle-123456.js")
+              mock_dev_server_running
+
+              path = described_class.server_bundle_js_file_path
+
+              expect(path).to end_with("/public/webpack/development/server-bundle-123456.js")
             end
           end
         end
 
-        context "with dev-server running, and server file in the manifest, and separate client/server files",
-                :shakapacker do
-          it "returns the correct path hashed server path" do
-            allow(ReactOnRails).to receive_message_chain("configuration.server_bundle_js_file")
-              .and_return("server-bundle.js")
-            allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
-              .and_return(false)
-            allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.manifest.lookup!")
-              .with("server-bundle.js")
-              .and_return("webpack/development/server-bundle-123456.js")
-            allow(ReactOnRails::PackerUtils).to receive_message_chain("packer.dev_server.running?")
-              .and_return(true)
+        describe ".rsc_bundle_js_file_path with #{packer_type} enabled" do
+          let(:packer_public_output_path) { Pathname.new("public/webpack/development") }
 
-            path = described_class.server_bundle_js_file_path
+          include_context "with #{packer_type} enabled"
 
-            expect(path).to end_with("/public/webpack/development/server-bundle-123456.js")
+          context "with server file not in manifest", packer_type.to_sym do
+            it "returns the unhashed server path" do
+              server_bundle_name = "rsc-bundle.js"
+              mock_bundle_configs(rsc_bundle_name: server_bundle_name)
+              mock_missing_manifest_entry(server_bundle_name)
+
+              path = described_class.rsc_bundle_js_file_path
+
+              expect(path).to end_with("public/webpack/development/#{server_bundle_name}")
+            end
+          end
+
+          context "with server file in the manifest, used for client", packer_type.to_sym do
+            it "returns the correct path hashed server path" do
+              Packer = ReactOnRails::PackerUtils.packer # rubocop:disable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
+              mock_bundle_configs(rsc_bundle_name: "webpack-bundle.js")
+              allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
+                .and_return(true)
+              mock_bundle_in_manifest("webpack-bundle.js", "webpack/development/webpack-bundle-123456.js")
+              allow(Packer).to receive_message_chain("dev_server.running?")
+                .and_return(false)
+
+              path = described_class.rsc_bundle_js_file_path
+              expect(path).to end_with("public/webpack/development/webpack-bundle-123456.js")
+              expect(path).to start_with("/")
+            end
+
+            context "with webpack-dev-server running, and same file used for server and client" do
+              it "returns the correct path hashed server path" do
+                mock_bundle_configs(rsc_bundle_name: "webpack-bundle.js")
+                allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
+                  .and_return(true)
+                mock_dev_server_running
+                mock_bundle_in_manifest("webpack-bundle.js", "/webpack/development/webpack-bundle-123456.js")
+
+                path = described_class.rsc_bundle_js_file_path
+
+                expect(path).to eq("http://localhost:3035/webpack/development/webpack-bundle-123456.js")
+              end
+            end
+          end
+
+          context "with dev-server running, and server file in the manifest, and separate client/server files",
+                  packer_type.to_sym do
+            it "returns the correct path hashed server path" do
+              mock_bundle_configs(rsc_bundle_name: "rsc-bundle.js")
+              allow(ReactOnRails).to receive_message_chain("configuration.same_bundle_for_client_and_server")
+                .and_return(false)
+              mock_bundle_in_manifest("rsc-bundle.js", "webpack/development/server-bundle-123456.js")
+              mock_dev_server_running
+
+              path = described_class.rsc_bundle_js_file_path
+
+              expect(path).to end_with("/public/webpack/development/server-bundle-123456.js")
+            end
           end
         end
       end

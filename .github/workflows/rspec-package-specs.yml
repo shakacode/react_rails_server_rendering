@@ -47,6 +47,9 @@ jobs:
         git config user.email "you@example.com"
         git config user.name "Your Name"
         git commit -am "stop generators from complaining about uncommitted code"
+    - name: Set packer version environment variable
+      run: |
+        echo "CI_PACKER_VERSION=${{ matrix.versions == 'oldest' && 'old' || 'new' }}" >> $GITHUB_ENV
     - name: Run rspec tests
       run: bundle exec rspec spec/react_on_rails
     - name: Store test results

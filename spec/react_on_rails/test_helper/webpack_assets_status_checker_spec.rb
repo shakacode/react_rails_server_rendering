@@ -67,10 +67,10 @@ describe ReactOnRails::TestHelper::WebpackAssetsStatusChecker do
             packer_public_output_path: generated_assets_full_path
           )
           allow(ReactOnRails.configuration).to receive(:server_bundle_js_file).and_return("server-bundle.js")
-          allow(ReactOnRails::Utils).to receive(:bundle_js_file_path)
+          allow(ReactOnRails::PackerUtils).to receive(:bundle_js_uri_from_packer)
             .with("manifest.json")
             .and_return(File.join(generated_assets_full_path, "manifest.json"))
-          allow(ReactOnRails::Utils).to receive(:bundle_js_file_path)
+          allow(ReactOnRails::PackerUtils).to receive(:bundle_js_uri_from_packer)
             .with("server-bundle.js")
             .and_raise(Packer::Manifest::MissingEntryError)
           touch_files_in_dir(generated_assets_full_path)

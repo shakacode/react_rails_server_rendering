@@ -115,6 +115,10 @@ module ReactOnRails
         options[:stream?]
       end
 
+      def rsc?
+        options[:rsc?]
+      end
+
       private
 
       attr_reader :options
