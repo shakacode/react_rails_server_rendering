@@ -2,7 +2,7 @@
 /// <reference types="react/experimental" />
 
 import type { ReactElement, ReactNode, Component, ComponentType } from 'react';
-import type { Readable, PassThrough } from 'stream';
+import type { Readable } from 'stream';
 
 // Don't import redux just for the type definitions
 // See https://github.com/shakacode/react_on_rails/issues/1321
@@ -126,6 +126,10 @@ export interface RenderParams extends Params {
   renderingReturnsPromises: boolean;
 }
 
+export interface RSCRenderParams extends RenderParams {
+  reactClientManifestFileName: string;
+}
+
 export interface CreateParams extends Params {
   componentObj: RegisteredComponent;
   shouldHydrate?: boolean;
@@ -185,7 +189,7 @@ export interface ReactOnRails {
   getOrWaitForComponent(name: string): Promise<RegisteredComponent>;
   serverRenderReactComponent(options: RenderParams): null | string | Promise<RenderResult>;
   streamServerRenderedReactComponent(options: RenderParams): Readable;
-  serverRenderRSCReactComponent(options: RenderParams): PassThrough;
+  serverRenderRSCReactComponent(options: RSCRenderParams): Readable;
   handleError(options: ErrorOptions): string | undefined;
   buildConsoleReplay(): string;
   registeredComponents(): Map<string, RegisteredComponent>;

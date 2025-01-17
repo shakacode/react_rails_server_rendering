@@ -44,7 +44,9 @@ module ReactOnRails
       puts(Rainbow("Generated Packs: #{output_path}").yellow)
     end
 
+    # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def first_js_statement_in_code(content)
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       return "" if content.nil? || content.empty?
 
       start_index = 0
@@ -81,7 +83,7 @@ module ReactOnRails
       ""
     end
 
-    def is_client_entrypoint?(file_path)
+    def client_entrypoint?(file_path)
       content = File.read(file_path)
       # has "use client" directive. It can be "use client" or 'use client'
       first_js_statement_in_code(content).match?(/^["']use client["'](?:;|\s|$)/)
@@ -89,9 +91,10 @@ module ReactOnRails
 
     def pack_file_contents(file_path)
       registered_component_name = component_name(file_path)
-      load_server_components = ReactOnRails::Utils.react_on_rails_pro? && ReactOnRailsPro.configuration.enable_rsc_support
+      load_server_components = ReactOnRails::Utils.react_on_rails_pro? &&
+                               ReactOnRailsPro.configuration.enable_rsc_support
 
-      if load_server_components && !is_client_entrypoint?(file_path)
+      if load_server_components && !client_entrypoint?(file_path)
         import_statement = ""
         rsc_rendering_url_path = ReactOnRailsPro.configuration.rsc_rendering_url_path
         register_call = <<~REGISTER_CALL.strip

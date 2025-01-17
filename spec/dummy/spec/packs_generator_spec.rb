@@ -82,7 +82,7 @@ module ReactOnRails
       it "generated pack for ComponentWithCommonOnly uses common file for pack" do
         pack_content = File.read(component_pack)
 
-        expect(pack_content).to include("#{component_namspec / dummy / spec / packs_generator_spec.rbe}.jsx")
+        expect(pack_content).to include("#{component_name}.jsx")
         expect(pack_content).not_to include("#{component_name}.client.jsx")
         expect(pack_content).not_to include("#{component_name}.server.jsx")
       end
@@ -434,7 +434,7 @@ module ReactOnRails
       end
 
       context "with string directive" do
-        context "on top of the file" do
+        context "when on top of the file" do
           let(:content) do
             <<~JS
               "use client";
@@ -446,13 +446,13 @@ module ReactOnRails
           it { is_expected.to eq '"use client";' }
         end
 
-        context "on top of the file and one line comment" do
+        context "when on top of the file and one line comment" do
           let(:content) { '"use client"; // const x = 1' }
 
           it { is_expected.to eq '"use client"; // const x = 1' }
         end
 
-        context "after some one-line comments" do
+        context "when after some one-line comments" do
           let(:content) do
             <<~JS
               // First comment
@@ -464,7 +464,7 @@ module ReactOnRails
           it { is_expected.to eq '"use client";' }
         end
 
-        context "after some multi-line comments" do
+        context "when after some multi-line comments" do
           let(:content) do
             <<~JS
               /* First comment */
@@ -478,7 +478,7 @@ module ReactOnRails
           it { is_expected.to eq '"use client";' }
         end
 
-        context "after some mixed comments" do
+        context "when after some mixed comments" do
           let(:content) do
             <<~JS
               // First comment
@@ -492,7 +492,7 @@ module ReactOnRails
           it { is_expected.to eq '"use client";' }
         end
 
-        context "after any non-comment code" do
+        context "when after any non-comment code" do
           let(:content) do
             <<~JS
               // First comment
@@ -506,8 +506,8 @@ module ReactOnRails
       end
     end
 
-    describe "#is_client_entrypoint?" do
-      subject { described_class.instance.send(:is_client_entrypoint?, "dummy_path.js") }
+    describe "#client_entrypoint?" do
+      subject { described_class.instance.send(:client_entrypoint?, "dummy_path.js") }
 
       before do
         allow(File).to receive(:read).with("dummy_path.js").and_return(content)

@@ -6,8 +6,8 @@ RSpec::Matchers.define :script_tag_be_included do |expected|
   opts = {}
   match do |actual|
     Nokogiri::HTML.fragment(actual).css("script").map do |script|
-      EquivalentXml.equivalent?(Nokogiri::HTML.fragment(script.to_s),
-                                Nokogiri::HTML.fragment(expected),
+      EquivalentXml.equivalent?(Nokogiri::HTML.fragment(script.to_s.delete(" \t\r\n")),
+                                Nokogiri::HTML.fragment(expected.delete(" \t\r\n")),
                                 opts)
     end.include?(true)
   end

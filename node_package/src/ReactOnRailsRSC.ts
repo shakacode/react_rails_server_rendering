@@ -1,13 +1,19 @@
-// @ts-expect-error will define this module types later
-import { renderToReadableStream } from 'react-server-dom-webpack/server.edge';
-import { PassThrough } from 'stream';
-import fs from 'fs';
+import { renderToPipeableStream } from 'react-server-dom-webpack/server.node';
+import { PassThrough, Readable } from 'stream';
+import type { ReactElement } from 'react';
 
-import { RenderParams } from './types';
-import ComponentRegistry from './ComponentRegistry';
-import createReactOutput from './createReactOutput';
-import { isPromise, isServerRenderHash } from './isServerRenderResult';
+import { RSCRenderParams } from './types';
 import ReactOnRails from './ReactOnRails';
+import buildConsoleReplay from './buildConsoleReplay';
+import handleError from './handleError';
+import {
+  streamServerRenderedComponent,
+  type StreamRenderState,
+  transformRenderStreamChunksToResultObject,
+  convertToError,
+  createResultObject,
+} from './serverRenderReactComponent';
+import loadReactClientManifest from './loadReactClientManifest';
 
 const stringToStream = (str: string) => {
   const stream = new PassThrough();
@@ -16,68 +22,49 @@ const stringToStream = (str: string) => {
   return stream;
 };
 
-const getBundleConfig = () => {
-  const bundleConfig = JSON.parse(fs.readFileSync('./public/webpack/development/react-client-manifest.json', 'utf8'));
-  // remove file:// from keys
-  const newBundleConfig: { [key: string]: unknown } = {};
-  for (const [key, value] of Object.entries(bundleConfig)) {
-    newBundleConfig[key.replace('file://', '')] = value;
-  }
-  return newBundleConfig;
-}
+const streamRenderRSCComponent = (reactElement: ReactElement, options: RSCRenderParams): Readable => {
+  const { throwJsErrors, reactClientManifestFileName } = options;
+  const renderState: StreamRenderState = {
+    result: null,
+    hasErrors: false,
+    isShellReady: true
+  };
 
-ReactOnRails.serverRenderRSCReactComponent = (options: RenderParams) => {
-  const { name, domNodeId, trace, props, railsContext, throwJsErrors } = options;
-
-  let renderResult: null | PassThrough = null;
-
+  const { pipeToTransform, readableStream, emitError } = transformRenderStreamChunksToResultObject(renderState);
   try {
-    const componentObj = ComponentRegistry.get(name);
-    if (componentObj.isRenderer) {
-      throw new Error(`\
-Detected a renderer while server rendering component '${name}'. \
-See https://github.com/shakacode/react_on_rails#renderer-functions`);
-    }
-
-    const reactRenderingResult = createReactOutput({
-      componentObj,
-      domNodeId,
-      trace,
-      props,
-      railsContext,
-    });
-
-    if (isServerRenderHash(reactRenderingResult) || isPromise(reactRenderingResult)) {
-      throw new Error('Server rendering of streams is not supported for server render hashes or promises.');
-    }
-
-    renderResult = new PassThrough();
-    let finalValue = "";
-    const streamReader = renderToReadableStream(reactRenderingResult, getBundleConfig()).getReader();
-    const decoder = new TextDecoder();
-    const processStream = async () => {
-      const { done, value } = await streamReader.read();
-      if (done) {
-        renderResult?.push(null);
-        // @ts-expect-error value is not typed
-        debugConsole.log('value', finalValue);
-        return;
+    const rscStream = renderToPipeableStream(
+      reactElement,
+      loadReactClientManifest(reactClientManifestFileName),
+      {
+        onError: (err) => {
+          const error = convertToError(err);
+          console.error("Error in RSC stream", error);
+          if (throwJsErrors) {
+            emitError(error);
+          }
+          renderState.hasErrors = true;
+          renderState.error = error;
+        }
       }
-
-      finalValue += decoder.decode(value);
-      renderResult?.push(value);
-      processStream();
-    }
-    processStream();
-  } catch (e: unknown) {
-    if (throwJsErrors) {
-      throw e;
-    }
-
-    renderResult = stringToStream(`Error: ${e}`);
+    );
+    pipeToTransform(rscStream);
+    return readableStream;
+  } catch (e) {
+    const error = convertToError(e);
+    renderState.hasErrors = true;
+    renderState.error = error;
+    const htmlResult = handleError({ e: error, name: options.name, serverSide: true });
+    const jsonResult = JSON.stringify(createResultObject(htmlResult, buildConsoleReplay(), renderState));
+    return stringToStream(jsonResult);
   }
+};
 
-  return renderResult;
+ReactOnRails.serverRenderRSCReactComponent = (options: RSCRenderParams) => {
+  try {
+    return streamServerRenderedComponent(options, streamRenderRSCComponent);
+  } finally {
+    console.history = [];
+  }
 };
 
 export * from './types';
