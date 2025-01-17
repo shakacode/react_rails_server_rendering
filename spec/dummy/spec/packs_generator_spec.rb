@@ -82,7 +82,7 @@ module ReactOnRails
       it "generated pack for ComponentWithCommonOnly uses common file for pack" do
         pack_content = File.read(component_pack)
 
-        expect(pack_content).to include("#{component_name / dummy / spec / packs_generator_spec.rbe}.jsx")
+        expect(pack_content).to include("#{component_name}.jsx")
         expect(pack_content).not_to include("#{component_name}.client.jsx")
         expect(pack_content).not_to include("#{component_name}.server.jsx")
       end
