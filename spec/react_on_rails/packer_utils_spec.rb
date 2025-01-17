@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative "spec_helper"
-require "shakapacker"
 
 module ReactOnRails
   describe PackerUtils do
@@ -45,7 +44,7 @@ module ReactOnRails
         before do
           allow(described_class.packer).to receive(:dev_server).and_return(
             instance_double(
-              ::Shakapacker::DevServer,
+              (ReactOnRails::PackerUtils.packer)::DevServer,
               running?: true,
               protocol: "http",
               host_with_port: "localhost:3035"
