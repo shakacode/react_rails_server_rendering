@@ -5,7 +5,7 @@
   "exports": {
     ".": {
       "node": "./node_package/lib/ReactOnRails.node.js",
-      "default": "./node_package/lib/ReactOnRails.js"
+      "default": "./node_package/lib/ReactOnRails.web.js"
     }
   },
   "directories": {

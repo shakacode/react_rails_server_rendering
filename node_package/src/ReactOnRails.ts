@@ -8,7 +8,6 @@ import serverRenderReactComponent from './serverRenderReactComponent';
 import buildConsoleReplay from './buildConsoleReplay';
 import createReactOutput from './createReactOutput';
 import Authenticity from './Authenticity';
-import context from './context';
 import type {
   RegisteredComponent,
   RenderParams,
@@ -19,31 +18,16 @@ import type {
   AuthenticityHeaders,
   Store,
   StoreGenerator,
+  ReactOnRails as ReactOnRailsType,
 } from './types';
 import reactHydrateOrRender from './reactHydrateOrRender';
-
-const ctx = context();
-
-if (ctx === undefined) {
-  throw new Error("The context (usually Window or NodeJS's Global) is undefined.");
-}
-
-if (ctx.ReactOnRails !== undefined) {
-  throw new Error(`
-    The ReactOnRails value exists in the ${ctx} scope, it may not be safe to overwrite it.
-    
-    This could be caused by setting Webpack's optimization.runtimeChunk to "true" or "multiple," rather than "single." Check your Webpack configuration.
-    
-    Read more at https://github.com/shakacode/react_on_rails/issues/1558.
-  `);
-}
 
 const DEFAULT_OPTIONS = {
   traceTurbolinks: false,
   turbo: false,
 };
 
-ctx.ReactOnRails = {
+const ReactOnRails: ReactOnRailsType = {
   options: {},
   /**
    * Main entry point to using the react-on-rails npm package. This is how Rails will be able to
@@ -299,9 +283,4 @@ ctx.ReactOnRails = {
   },
 };
 
-ctx.ReactOnRails.resetOptions();
-
-ClientStartup.clientStartup(ctx);
-
-export * from "./types";
-export default ctx.ReactOnRails;
+export default ReactOnRails;
