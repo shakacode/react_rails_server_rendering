@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "spec_helper"
+require "shakapacker"
 
 module ReactOnRails
   describe PackerUtils do
