@@ -436,7 +436,7 @@ module ReactOnRails
       render_options = create_render_options(react_component_name, options)
       json_stream = server_rendered_react_component(render_options)
       json_stream.transform do |chunk|
-        (chunk.to_json + "\n").html_safe
+        "#{chunk.to_json}\n".html_safe
       end
     end
 
